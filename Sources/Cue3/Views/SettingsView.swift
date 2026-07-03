@@ -458,26 +458,18 @@ private struct PromptTemplateEditor: NSViewRepresentable {
     @Binding var text: String
 
     func makeNSView(context: Context) -> NSScrollView {
-        let scrollView = NSScrollView()
+        let scrollView = NSTextView.scrollableTextView()
         scrollView.drawsBackground = false
         scrollView.borderType = .noBorder
         scrollView.hasVerticalScroller = true
         scrollView.hasHorizontalScroller = false
         scrollView.autohidesScrollers = true
 
-        let textView = NSTextView()
-        textView.delegate = context.coordinator
-        textView.drawsBackground = false
-        textView.isRichText = false
-        textView.allowsUndo = true
-        textView.isVerticallyResizable = true
-        textView.isHorizontallyResizable = false
-        textView.textContainerInset = NSSize(width: 8, height: 8)
-        textView.font = .systemFont(ofSize: 13)
-        textView.textColor = .labelColor
-        textView.textContainer?.widthTracksTextView = true
-        textView.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
-        scrollView.documentView = textView
+        guard let textView = scrollView.documentView as? NSTextView else {
+            return scrollView
+        }
+
+        configure(textView, coordinator: context.coordinator)
         context.coordinator.applyHighlight(to: textView, text: text)
         return scrollView
     }
@@ -486,6 +478,8 @@ private struct PromptTemplateEditor: NSViewRepresentable {
         guard let textView = scrollView.documentView as? NSTextView else {
             return
         }
+
+        configure(textView, coordinator: context.coordinator)
         if textView.string != text {
             context.coordinator.applyHighlight(to: textView, text: text)
         } else {
@@ -495,6 +489,23 @@ private struct PromptTemplateEditor: NSViewRepresentable {
 
     func makeCoordinator() -> Coordinator {
         Coordinator(text: $text)
+    }
+
+    private func configure(_ textView: NSTextView, coordinator: Coordinator) {
+        textView.delegate = coordinator
+        textView.drawsBackground = false
+        textView.isRichText = false
+        textView.allowsUndo = true
+        textView.isEditable = true
+        textView.isSelectable = true
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.textContainerInset = NSSize(width: 8, height: 8)
+        textView.font = .systemFont(ofSize: 13)
+        textView.textColor = .labelColor
+        textView.insertionPointColor = .labelColor
+        textView.textContainer?.widthTracksTextView = true
+        textView.textContainer?.containerSize = NSSize(width: 0, height: CGFloat.greatestFiniteMagnitude)
     }
 
     @MainActor
