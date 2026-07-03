@@ -103,6 +103,7 @@ final class AppSettings {
         static let launchAtLoginEnabled = "settings.launchAtLoginEnabled"
         static let openMainWindowOnLaunch = "settings.openMainWindowOnLaunch"
         static let panelIsPinned = "settings.panel.isPinned"
+        static let didCompleteInitialLaunch = "settings.didCompleteInitialLaunch"
     }
 
     var appearanceMode: AppearanceMode {
@@ -169,6 +170,8 @@ final class AppSettings {
     var onAppearanceModeChanged: ((AppearanceMode) -> Void)?
     var onLaunchAtLoginChanged: ((Bool) -> Void)?
 
+    private(set) var didCompleteInitialLaunch: Bool
+
     private let userDefaults: UserDefaults
 
     init(userDefaults: UserDefaults = .standard) {
@@ -182,6 +185,7 @@ final class AppSettings {
         launchAtLoginEnabled = userDefaults.object(forKey: StorageKey.launchAtLoginEnabled) as? Bool ?? false
         openMainWindowOnLaunch = userDefaults.object(forKey: StorageKey.openMainWindowOnLaunch) as? Bool ?? false
         panelIsPinned = userDefaults.object(forKey: StorageKey.panelIsPinned) as? Bool ?? true
+        didCompleteInitialLaunch = userDefaults.object(forKey: StorageKey.didCompleteInitialLaunch) as? Bool ?? false
         openShortcut = Self.loadShortcut(from: userDefaults, for: .open)
         newCueShortcut = Self.loadShortcut(from: userDefaults, for: .newCue)
         captureShortcut = Self.loadShortcut(from: userDefaults, for: .capture)
@@ -195,6 +199,18 @@ final class AppSettings {
     var resolvedCuePromptTemplate: String {
         let trimmed = cuePrompt.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? Self.defaultCuePrompt : trimmed
+    }
+
+    var shouldShowMainPanelOnLaunch: Bool {
+        openMainWindowOnLaunch || !didCompleteInitialLaunch
+    }
+
+    func markInitialLaunchCompleted() {
+        guard !didCompleteInitialLaunch else {
+            return
+        }
+        didCompleteInitialLaunch = true
+        userDefaults.set(true, forKey: StorageKey.didCompleteInitialLaunch)
     }
 
     func shortcut(for action: MenuAction) -> ShortcutConfiguration? {

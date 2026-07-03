@@ -124,10 +124,12 @@ struct Cue3App: App {
             self.statusBarController = StatusBarController { [store, panelController] in
                 panelController.show(cueID: store.currentCueID, activatingPanel: true)
             }
-            if settings.openMainWindowOnLaunch {
-                DispatchQueue.main.async {
-                    panelController.show(cueID: store.currentCueID, activatingPanel: true)
-                }
+            applicationDelegate.handleDidFinishLaunching = { [settings, store, panelController] in
+                Self.completeLaunch(
+                    settings: settings,
+                    store: store,
+                    panelController: panelController
+                )
             }
         } catch {
             fatalError("无法创建 Cue3 数据容器：\(error.localizedDescription)")
@@ -250,6 +252,26 @@ struct Cue3App: App {
         }
     }
 
+    private static func completeLaunch(
+        settings: AppSettings,
+        store: CueStore,
+        panelController: PanelController
+    ) {
+        closeUnexpectedStartupWindows(except: panelController.window)
+
+        if settings.shouldShowMainPanelOnLaunch {
+            panelController.show(cueID: store.currentCueID, activatingPanel: true)
+        }
+
+        settings.markInitialLaunchCompleted()
+    }
+
+    private static func closeUnexpectedStartupWindows(except panelWindow: NSWindow) {
+        for window in NSApp.windows where window !== panelWindow && window.isVisible {
+            window.orderOut(nil)
+        }
+    }
+
 }
 
 private func postCommandV() {
@@ -327,8 +349,13 @@ private final class SettingsWindowController {
 }
 
 private final class ApplicationDelegate: NSObject, NSApplicationDelegate {
+    var handleDidFinishLaunching: (() -> Void)?
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApplication.shared.setActivationPolicy(.accessory)
+        DispatchQueue.main.async { [weak self] in
+            self?.handleDidFinishLaunching?()
+        }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {

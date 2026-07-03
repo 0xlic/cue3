@@ -46,6 +46,7 @@ final class PanelController: NSObject, NSWindowDelegate {
 
     var isVisible: Bool { panel.isVisible }
     var screen: NSScreen? { panel.screen }
+    var window: NSWindow { panel }
 
     init(
         store: CueStore,
