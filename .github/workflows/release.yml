@@ -11,7 +11,7 @@ permissions:
 jobs:
   mac-release:
     name: Build macOS release
-    runs-on: macos-14
+    runs-on: macos-15
     env:
       PROJECT_PATH: Cue3.xcodeproj
       SCHEME: Cue3
@@ -22,8 +22,8 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Select Xcode 15.4
-        run: sudo xcode-select -s /Applications/Xcode_15.4.app
+      - name: Show Xcode version
+        run: xcodebuild -version
 
       - name: Resolve version
         id: version
