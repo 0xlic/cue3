@@ -1,0 +1,114 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*.*.*"
+
+permissions:
+  contents: write
+
+jobs:
+  mac-release:
+    name: Build macOS release
+    runs-on: macos-14
+    env:
+      PROJECT_PATH: Cue3.xcodeproj
+      SCHEME: Cue3
+      APP_NAME: Cue3
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Select Xcode 15.4
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app
+
+      - name: Resolve version
+        id: version
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME}"
+          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Tag must be a semantic version like vX.Y.Z"
+            exit 1
+          fi
+          echo "tag=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION#v}" >> "$GITHUB_OUTPUT"
+          echo "build_number=${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+
+      - name: Archive app
+        run: |
+          xcodebuild archive \
+            -project "$PROJECT_PATH" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -destination "generic/platform=macOS" \
+            -archivePath "$RUNNER_TEMP/$APP_NAME.xcarchive" \
+            CODE_SIGNING_ALLOWED=NO \
+            MARKETING_VERSION="${{ steps.version.outputs.version }}" \
+            CURRENT_PROJECT_VERSION="${{ steps.version.outputs.build_number }}"
+
+      - name: Package app
+        id: package
+        shell: bash
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          VERSION="${{ steps.version.outputs.version }}"
+          DIST_ROOT="$RUNNER_TEMP/dist"
+          RELEASE_DIR="$DIST_ROOT/$APP_NAME/$TAG"
+          ARCHIVE_APP="$RUNNER_TEMP/$APP_NAME.xcarchive/Products/Applications/$APP_NAME.app"
+          ASSET_BASENAME="$APP_NAME-$TAG-macOS"
+          ZIP_PATH="$RELEASE_DIR/$ASSET_BASENAME.zip"
+          CHECKSUM_PATH="$RELEASE_DIR/$ASSET_BASENAME.sha256.txt"
+          NOTES_PATH="$RELEASE_DIR/RELEASE_NOTES.txt"
+
+          mkdir -p "$RELEASE_DIR"
+          ditto -c -k --sequesterRsrc --keepParent "$ARCHIVE_APP" "$ZIP_PATH"
+          shasum -a 256 "$ZIP_PATH" > "$CHECKSUM_PATH"
+          cat > "$NOTES_PATH" <<EOF
+          $APP_NAME $VERSION
+
+          Included files:
+          - $ASSET_BASENAME.zip
+          - $ASSET_BASENAME.sha256.txt
+
+          Install:
+          1. Download and unzip $ASSET_BASENAME.zip
+          2. Drag $APP_NAME.app into Applications
+          3. If Gatekeeper blocks launch, right-click the app and choose Open
+          EOF
+
+          echo "asset_basename=$ASSET_BASENAME" >> "$GITHUB_OUTPUT"
+          echo "release_dir=$RELEASE_DIR" >> "$GITHUB_OUTPUT"
+          echo "zip_path=$ZIP_PATH" >> "$GITHUB_OUTPUT"
+          echo "checksum_path=$CHECKSUM_PATH" >> "$GITHUB_OUTPUT"
+          echo "notes_path=$NOTES_PATH" >> "$GITHUB_OUTPUT"
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.package.outputs.asset_basename }}
+          path: ${{ steps.package.outputs.release_dir }}
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: ${{ env.APP_NAME }} ${{ steps.version.outputs.tag }}
+          generate_release_notes: true
+          body: |
+            macOS release package for `${{ env.APP_NAME }}`.
+
+            Files:
+            - `${{ steps.package.outputs.asset_basename }}.zip`
+            - `${{ steps.package.outputs.asset_basename }}.sha256.txt`
+
+            Install:
+            1. Download and unzip `${{ steps.package.outputs.asset_basename }}.zip`
+            2. Drag `${{ env.APP_NAME }}.app` into `Applications`
+            3. If Gatekeeper blocks launch, right-click the app and choose `Open`
+          files: |
+            ${{ steps.package.outputs.zip_path }}
+            ${{ steps.package.outputs.checksum_path }}
