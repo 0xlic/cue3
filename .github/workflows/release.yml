@@ -11,16 +11,20 @@ permissions:
 jobs:
   mac-release:
     name: Build macOS release
-    runs-on: macos-15
+    runs-on: macos-26
     env:
       PROJECT_PATH: Cue3.xcodeproj
       SCHEME: Cue3
       APP_NAME: Cue3
+      DEVELOPER_DIR: /Applications/Xcode_26.5.app/Contents/Developer
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Select Xcode 26.5
+        run: sudo xcode-select -s "$DEVELOPER_DIR"
 
       - name: Show Xcode version
         run: xcodebuild -version
