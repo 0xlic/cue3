@@ -19,28 +19,26 @@ struct MainPanelView: View {
     }
 
     var body: some View {
-        panelBody
-            .frame(minWidth: 300, minHeight: 500)
-            .background(PanelSurface())
-            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-            .overlay(PanelEdgeHighlight())
-            .alert(
-                "操作未完成",
-                isPresented: Binding(
-                    get: { store.errorMessage != nil },
-                    set: { if !$0 { store.errorMessage = nil } }
-                )
-            ) {
-                Button("知道了", role: .cancel) {
+        ZStack {
+            panelBody
+
+            if let errorMessage = store.errorMessage {
+                PanelErrorOverlay(
+                    title: "操作未完成",
+                    message: errorMessage
+                ) {
                     store.errorMessage = nil
                 }
-            } message: {
-                Text(store.errorMessage ?? "未知错误")
             }
-            .onChange(of: selectedCue?.id) {
-                isEditingTitle = false
-                titleFocused = false
-            }
+        }
+        .frame(minWidth: 300, minHeight: 500)
+        .background(PanelSurface())
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(PanelEdgeHighlight())
+        .onChange(of: selectedCue?.id) {
+            isEditingTitle = false
+            titleFocused = false
+        }
     }
 
     private var panelBody: some View {
@@ -639,6 +637,47 @@ private struct PanelSurface: View {
                 RoundedRectangle(cornerRadius: 22, style: .continuous)
                     .strokeBorder(Color.black.opacity(0.08), lineWidth: 1)
             }
+    }
+}
+
+private struct PanelErrorOverlay: View {
+    let title: String
+    let message: String
+    let dismiss: () -> Void
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.18)
+                .ignoresSafeArea()
+                .onTapGesture(perform: dismiss)
+
+            VStack(alignment: .leading, spacing: 16) {
+                Text(title)
+                    .font(.title3.weight(.semibold))
+
+                Text(message)
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Button("知道了", action: dismiss)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.large)
+                    .frame(maxWidth: .infinity, alignment: .center)
+            }
+            .padding(22)
+            .frame(maxWidth: 260)
+            .background {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .fill(Color(nsColor: .windowBackgroundColor))
+            }
+            .overlay {
+                RoundedRectangle(cornerRadius: 18, style: .continuous)
+                    .strokeBorder(Color.black.opacity(0.08), lineWidth: 1)
+            }
+            .shadow(color: .black.opacity(0.18), radius: 18, y: 10)
+            .padding(24)
+        }
     }
 }
 

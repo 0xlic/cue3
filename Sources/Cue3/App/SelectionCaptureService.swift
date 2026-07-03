@@ -11,14 +11,14 @@ final class SelectionCaptureService {
     }
 
     enum CaptureError: LocalizedError {
-        case accessibilityPermissionRequired(String)
+        case accessibilityPermissionRequired
         case noTargetApplication
         case noSelectedText
 
         var errorDescription: String? {
             switch self {
-            case .accessibilityPermissionRequired(let identity):
-                return "系统仍未授予当前运行的 Cue3 辅助功能权限。请确认系统设置中授权的是这个程序：\(identity)"
+            case .accessibilityPermissionRequired:
+                return "Cue3 还没有获得辅助功能权限。请到系统设置里为当前打开的 Cue3 打开权限后再试一次。"
             case .noTargetApplication:
                 return "找不到可捕获文本的前台应用。"
             case .noSelectedText:
@@ -45,7 +45,7 @@ final class SelectionCaptureService {
         guard axTrusted else {
             requestAccessibilityTrustPrompt()
             logger.error("capture failed source=\(source.rawValue, privacy: .public) reason=accessibilityPermissionRequired target=\(self.applicationDescription(application), privacy: .public) identity=\(identity, privacy: .public)")
-            throw CaptureError.accessibilityPermissionRequired(identity)
+            throw CaptureError.accessibilityPermissionRequired
         }
 
         if let accessibilityText = selectedTextViaAccessibility(from: application) {

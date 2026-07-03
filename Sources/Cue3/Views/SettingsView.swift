@@ -5,30 +5,68 @@ import SwiftUI
 @MainActor
 struct SettingsRootView: View {
     @Bindable var settings: AppSettings
+    var onPreferredContentSizeChange: (CGSize) -> Void = { _ in }
+    @State private var selectedTab: SettingsTab = .general
+
+    private enum SettingsTab: Hashable {
+        case general
+        case shortcuts
+        case cue
+        case about
+
+        var preferredHeight: CGFloat {
+            switch self {
+            case .general:
+                return 290
+            case .shortcuts:
+                return 270
+            case .cue:
+                return 352
+            case .about:
+                return 300
+            }
+        }
+    }
+
+    private static let preferredWidth: CGFloat = 560
 
     var body: some View {
-        TabView {
+        TabView(selection: $selectedTab) {
             GeneralSettingsView(settings: settings)
+                .tag(SettingsTab.general)
                 .tabItem {
                     Label("常规", systemImage: "gearshape")
                 }
 
             ShortcutSettingsView(settings: settings)
+                .tag(SettingsTab.shortcuts)
                 .tabItem {
                     Label("快捷键", systemImage: "keyboard")
                 }
 
             CueSettingsView(settings: settings)
+                .tag(SettingsTab.cue)
                 .tabItem {
                     Label("Cue", systemImage: "text.quote")
                 }
 
             AboutSettingsView()
+                .tag(SettingsTab.about)
                 .tabItem {
                     Label("关于", systemImage: "info.circle")
                 }
         }
-        .frame(width: 560, height: 360)
+        .frame(width: Self.preferredWidth, height: selectedTab.preferredHeight)
+        .onAppear(perform: reportPreferredContentSize)
+        .onChange(of: selectedTab) { _ in
+            reportPreferredContentSize()
+        }
+    }
+
+    private func reportPreferredContentSize() {
+        onPreferredContentSizeChange(
+            CGSize(width: Self.preferredWidth, height: selectedTab.preferredHeight)
+        )
     }
 }
 
@@ -48,7 +86,7 @@ private struct GeneralSettingsView: View {
                         }
                         .labelsHidden()
                         .pickerStyle(.segmented)
-                        .frame(width: 220)
+                        .frame(width: 220, alignment: .trailing)
                     }
 
                     Divider()
@@ -62,13 +100,17 @@ private struct GeneralSettingsView: View {
 
             SettingsSection(title: "启动") {
                 VStack(alignment: .leading, spacing: 8) {
-                    Toggle("开机自启动", isOn: $settings.launchAtLoginEnabled)
-                        .toggleStyle(.switch)
+                    GeneralSettingsToggleRow(
+                        title: "开机自启动",
+                        isOn: $settings.launchAtLoginEnabled
+                    )
 
                     Divider()
 
-                    Toggle("启动后打开主窗口", isOn: $settings.openMainWindowOnLaunch)
-                        .toggleStyle(.switch)
+                    GeneralSettingsToggleRow(
+                        title: "启动后打开主窗口",
+                        isOn: $settings.openMainWindowOnLaunch
+                    )
                 }
             }
         }
@@ -193,11 +235,31 @@ private struct GeneralSettingsRow<Content: View>: View {
         HStack(alignment: .center, spacing: 16) {
             Text(title)
                 .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .frame(width: 52, alignment: .leading)
+                .frame(alignment: .leading)
+
+            Spacer(minLength: 0)
 
             content
-                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+}
+
+@MainActor
+private struct GeneralSettingsToggleRow: View {
+    let title: String
+    @Binding var isOn: Bool
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 16) {
+            Text(title)
+                .font(.subheadline)
+                .frame(alignment: .leading)
+
+            Spacer(minLength: 0)
+
+            Toggle("", isOn: $isOn)
+                .labelsHidden()
+                .toggleStyle(.switch)
         }
     }
 }

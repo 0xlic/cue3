@@ -271,15 +271,20 @@ private final class SettingsWindowController {
     private let window: NSWindow
 
     init(settings: AppSettings) {
-        window = NSWindow(
+        let window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 560, height: 360),
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false
         )
+        self.window = window
         window.title = "设置"
         window.isReleasedWhenClosed = false
-        window.contentView = NSHostingView(rootView: SettingsRootView(settings: settings))
+        window.contentView = NSHostingView(
+            rootView: SettingsRootView(settings: settings) { [weak window] size in
+                Self.updateWindow(window, contentSize: size)
+            }
+        )
     }
 
     func show(on screen: NSScreen?) {
@@ -302,6 +307,23 @@ private final class SettingsWindowController {
         frame.origin.y = visibleFrame.midY - frame.height / 2
         window.setFrame(frame, display: false)
     }
+
+    private static func updateWindow(_ window: NSWindow?, contentSize: CGSize) {
+        guard let window else {
+            return
+        }
+
+        let currentFrame = window.frame
+        let currentContentSize = window.contentRect(forFrameRect: currentFrame).size
+        guard currentContentSize != contentSize else {
+            return
+        }
+
+        var targetFrame = window.frameRect(forContentRect: NSRect(origin: .zero, size: contentSize))
+        targetFrame.origin.x = currentFrame.midX - targetFrame.width / 2
+        targetFrame.origin.y = currentFrame.maxY - targetFrame.height
+        window.setFrame(targetFrame, display: true, animate: window.isVisible)
+    }
 }
 
 private final class ApplicationDelegate: NSObject, NSApplicationDelegate {
@@ -318,11 +340,24 @@ private final class ApplicationDelegate: NSObject, NSApplicationDelegate {
 private final class StatusBarController {
     private let statusItem: NSStatusItem
     private let action: () -> Void
+    private let menu: NSMenu
 
     init(action: @escaping () -> Void) {
         self.action = action
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        menu = NSMenu()
+        configureMenu()
         configureButton()
+    }
+
+    private func configureMenu() {
+        let quitItem = NSMenuItem(
+            title: "退出 Cue3",
+            action: #selector(handleQuit),
+            keyEquivalent: ""
+        )
+        quitItem.target = self
+        menu.addItem(quitItem)
     }
 
     private func configureButton() {
@@ -334,11 +369,20 @@ private final class StatusBarController {
         button.toolTip = "显示主面板"
         button.target = self
         button.action = #selector(handleClick)
-        button.sendAction(on: [.leftMouseUp])
+        button.sendAction(on: [.leftMouseUp, .rightMouseUp])
     }
 
     @objc
     private func handleClick() {
+        if NSApp.currentEvent?.type == .rightMouseUp {
+            statusItem.popUpMenu(menu)
+            return
+        }
         action()
+    }
+
+    @objc
+    private func handleQuit() {
+        NSApplication.shared.terminate(nil)
     }
 }

@@ -88,6 +88,15 @@ final class AppSettings {
     {{Cue}}
     """
 
+    private static func normalizedCuePrompt(_ prompt: String?) -> String {
+        guard let prompt,
+              !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return defaultCuePrompt
+        }
+        return prompt
+    }
+
+
     private enum StorageKey {
         static let appearanceMode = "settings.appearanceMode"
         static let cuePrompt = "settings.cuePrompt"
@@ -164,10 +173,12 @@ final class AppSettings {
 
     init(userDefaults: UserDefaults = .standard) {
         self.userDefaults = userDefaults
+        let storedCuePrompt = userDefaults.string(forKey: StorageKey.cuePrompt)
+        let initialCuePrompt = Self.normalizedCuePrompt(storedCuePrompt)
         appearanceMode = AppearanceMode(
             rawValue: userDefaults.string(forKey: StorageKey.appearanceMode) ?? ""
         ) ?? .automatic
-        cuePrompt = userDefaults.string(forKey: StorageKey.cuePrompt) ?? Self.defaultCuePrompt
+        cuePrompt = initialCuePrompt
         launchAtLoginEnabled = userDefaults.object(forKey: StorageKey.launchAtLoginEnabled) as? Bool ?? false
         openMainWindowOnLaunch = userDefaults.object(forKey: StorageKey.openMainWindowOnLaunch) as? Bool ?? false
         panelIsPinned = userDefaults.object(forKey: StorageKey.panelIsPinned) as? Bool ?? true
@@ -175,6 +186,10 @@ final class AppSettings {
         newCueShortcut = Self.loadShortcut(from: userDefaults, for: .newCue)
         captureShortcut = Self.loadShortcut(from: userDefaults, for: .capture)
         cueShortcut = Self.loadShortcut(from: userDefaults, for: .cue)
+
+        if storedCuePrompt != initialCuePrompt {
+            userDefaults.set(initialCuePrompt, forKey: StorageKey.cuePrompt)
+        }
     }
 
     var resolvedCuePromptTemplate: String {
