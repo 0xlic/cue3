@@ -29,7 +29,7 @@ final class LifecycleCoordinator {
 
     private func cleanupAndSchedule() {
         do {
-            try store.cleanupHistoryCues()
+            try store.cleanupExpiredCues()
         } catch {
             store.errorMessage = error.localizedDescription
         }

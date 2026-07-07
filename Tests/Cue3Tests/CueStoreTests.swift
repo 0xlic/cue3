@@ -40,6 +40,25 @@ final class CueStoreTests: XCTestCase {
         XCTAssertTrue(store.historyCues.isEmpty)
     }
 
+    func testEnsureCurrentCueCreatesMissingCurrentAndReusesExisting() throws {
+        let clock = TestClock(date("2026-06-20T08:00:00Z"))
+        let (store, _) = try makeStore(clock: clock)
+
+        let cue = try store.ensureCurrentCue()
+
+        XCTAssertEqual(store.currentCueID, cue.id)
+        XCTAssertEqual(store.currentCue?.id, cue.id)
+        XCTAssertEqual(store.cues.map(\.id), [cue.id])
+        XCTAssertTrue(store.orderedItems(for: cue).isEmpty)
+
+        clock.advance(by: 10)
+        let existing = try store.ensureCurrentCue()
+
+        XCTAssertEqual(existing.id, cue.id)
+        XCTAssertEqual(store.cues.map(\.id), [cue.id])
+        XCTAssertEqual(cue.createdAt, date("2026-06-20T08:00:00Z"))
+    }
+
     func testStartingNewCueArchivesPopulatedCurrentAndDropsEmptyCurrent() throws {
         let clock = TestClock(date("2026-06-20T08:00:00Z"))
         let (store, _) = try makeStore(clock: clock)
@@ -333,7 +352,7 @@ final class CueStoreTests: XCTestCase {
         }
     }
 
-    func testCleanupDeletesOnlyHistoryOlderThanTwentyFourHours() throws {
+    func testCleanupDeletesExpiredCuesAndCreatesReplacementWhenEmpty() throws {
         let clock = TestClock(date("2026-06-20T08:00:00Z"))
         let (store, _) = try makeStore(clock: clock)
         let expired = try store.createCue(quoteText: "将过期历史", annotationText: nil)
@@ -341,15 +360,19 @@ final class CueStoreTests: XCTestCase {
         let current = try store.createCue(quoteText: "当前保留", annotationText: nil)
 
         clock.value = date("2026-06-21T08:59:00Z")
-        XCTAssertEqual(try store.cleanupHistoryCues(), 0)
+        XCTAssertEqual(try store.cleanupExpiredCues(), 0)
         XCTAssertTrue(store.historyCues.contains { $0.id == expired.id })
+        XCTAssertEqual(store.currentCueID, current.id)
 
         clock.value = date("2026-06-21T09:00:01Z")
-        XCTAssertEqual(try store.cleanupHistoryCues(), 1)
-        XCTAssertEqual(try store.cleanupHistoryCues(), 0)
-        XCTAssertEqual(store.currentCueID, current.id)
-        XCTAssertTrue(store.cues.contains { $0.id == current.id })
+        XCTAssertEqual(try store.cleanupExpiredCues(), 2)
+        let replacement = try XCTUnwrap(store.currentCue)
+        XCTAssertNotEqual(replacement.id, current.id)
+        XCTAssertEqual(store.cues.map(\.id), [replacement.id])
+        XCTAssertTrue(store.orderedItems(for: replacement).isEmpty)
         XCTAssertFalse(store.cues.contains { $0.id == expired.id })
+        XCTAssertFalse(store.cues.contains { $0.id == current.id })
+        XCTAssertEqual(try store.cleanupExpiredCues(), 0)
     }
 
     func testDiskContainerRestoresCueItemsAndCurrentCue() throws {

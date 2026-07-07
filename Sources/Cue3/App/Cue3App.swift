@@ -259,8 +259,16 @@ struct Cue3App: App {
     ) {
         closeUnexpectedStartupWindows(except: panelController.window)
 
+        let cueID: UUID?
+        do {
+            cueID = try store.ensureCurrentCue().id
+        } catch {
+            store.errorMessage = error.localizedDescription
+            cueID = store.currentCueID
+        }
+
         if settings.shouldShowMainPanelOnLaunch {
-            panelController.show(cueID: store.currentCueID, activatingPanel: true)
+            panelController.show(cueID: cueID, activatingPanel: true)
         }
 
         settings.markInitialLaunchCompleted()

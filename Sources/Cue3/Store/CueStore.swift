@@ -176,6 +176,20 @@ final class CueStore {
     }
 
     @discardableResult
+    func ensureCurrentCue() throws -> CueRecord {
+        try reload(repairingCurrent: true)
+        if let currentCue {
+            return currentCue
+        }
+
+        let timestamp = now()
+        let cue = makeCurrentCue(at: timestamp)
+        setCurrentCue(id: cue.id)
+        try persist()
+        return cue
+    }
+
+    @discardableResult
     func createCue(quoteText: String, annotationText: String?) throws -> CueRecord {
         try validateQuote(quoteText)
         let timestamp = now()
@@ -357,19 +371,30 @@ final class CueStore {
     }
 
     @discardableResult
-    func cleanupHistoryCues(at date: Date? = nil) throws -> Int {
+    func cleanupExpiredCues(at date: Date? = nil) throws -> Int {
         let timestamp = date ?? now()
-        let cutoff = timestamp.addingTimeInterval(-Self.historyLifetime)
+        let cutoff = timestamp.addingTimeInterval(-Self.cueLifetime)
         let expired = cues.filter { cue in
-            guard cue.status == .history else { return false }
-            return cue.updatedAt < cutoff
+            cue.updatedAt < cutoff
         }
+        let deletedCurrentCue = expired.contains { $0.id == currentCueID }
         expired.forEach { cue in
             items(for: cue).forEach(context.delete)
             items.removeAll { $0.cueID == cue.id }
             context.delete(cue)
+            cues.removeAll { $0.id == cue.id }
         }
-        if !expired.isEmpty {
+
+        if deletedCurrentCue {
+            setCurrentCue(id: nil)
+        }
+        var createdCurrentCue = false
+        if currentCue == nil {
+            let cue = makeCurrentCue(at: timestamp)
+            setCurrentCue(id: cue.id)
+            createdCurrentCue = true
+        }
+        if !expired.isEmpty || createdCurrentCue {
             try persist()
         }
         return expired.count
@@ -563,5 +588,5 @@ final class CueStore {
         }
     }
 
-    private static let historyLifetime: TimeInterval = 24 * 60 * 60
+    private static let cueLifetime: TimeInterval = 24 * 60 * 60
 }

@@ -194,11 +194,7 @@ struct MainPanelView: View {
         ContentUnavailableView {
             Label("还没有 Cue", systemImage: "quote.bubble")
         } description: {
-            Text("新建上下文后，选中文本并捕获到当前 Cue。")
-        } actions: {
-            Button("新建上下文") {
-                startNewCue()
-            }
+            Text("启动后会自动创建当前 Cue。")
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
@@ -209,15 +205,6 @@ struct MainPanelView: View {
         } catch {
             store.errorMessage = error.localizedDescription
         }
-    }
-
-    private func startNewCue() {
-        perform {
-            let cue = try store.startNewCue()
-            panelState.selectedCueID = cue.id
-        }
-        isEditingTitle = false
-        titleFocused = false
     }
 
     private func showCueList() {
