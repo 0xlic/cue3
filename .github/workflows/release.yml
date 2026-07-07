@@ -50,7 +50,9 @@ jobs:
             -configuration Release \
             -destination "generic/platform=macOS" \
             -archivePath "$RUNNER_TEMP/$APP_NAME.xcarchive" \
-            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY="-" \
+            CODE_SIGNING_ALLOWED=YES \
+            CODE_SIGNING_REQUIRED=YES \
             MARKETING_VERSION="${{ steps.version.outputs.version }}" \
             CURRENT_PROJECT_VERSION="${{ steps.version.outputs.build_number }}"
 
@@ -69,6 +71,8 @@ jobs:
           NOTES_PATH="$RELEASE_DIR/RELEASE_NOTES.txt"
 
           mkdir -p "$RELEASE_DIR"
+          codesign --verify --deep --strict --verbose=2 "$ARCHIVE_APP"
+          codesign -dv --verbose=4 "$ARCHIVE_APP"
           ditto -c -k --sequesterRsrc --keepParent "$ARCHIVE_APP" "$ZIP_PATH"
           shasum -a 256 "$ZIP_PATH" > "$CHECKSUM_PATH"
           cat > "$NOTES_PATH" <<EOF
@@ -82,6 +86,7 @@ jobs:
           1. Download and unzip $ASSET_BASENAME.zip
           2. Drag $APP_NAME.app into Applications
           3. If Gatekeeper blocks launch, right-click the app and choose Open
+          4. If Accessibility permission keeps prompting, remove old Cue3 entries from System Settings first, then grant the Cue3.app in Applications again
           EOF
 
           echo "asset_basename=$ASSET_BASENAME" >> "$GITHUB_OUTPUT"
@@ -113,6 +118,7 @@ jobs:
             1. Download and unzip `${{ steps.package.outputs.asset_basename }}.zip`
             2. Drag `${{ env.APP_NAME }}.app` into `Applications`
             3. If Gatekeeper blocks launch, right-click the app and choose `Open`
+            4. If Accessibility permission keeps prompting, remove old Cue3 entries from System Settings first, then grant the `Cue3.app` in `Applications` again
           files: |
             ${{ steps.package.outputs.zip_path }}
             ${{ steps.package.outputs.checksum_path }}

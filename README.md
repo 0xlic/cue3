@@ -49,7 +49,7 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project Cue
 
 如果你是从 GitHub Release 下载应用，请先将 `Cue3.app` 拖到 `Applications`。
 
-当前公开发布包可能未经过 Apple Developer 签名与公证，macOS Gatekeeper 可能会阻止直接打开。遇到这种情况时，可以按下面步骤处理：
+当前公开发布包使用 ad-hoc 签名，但还不是 Apple Developer ID 签名与公证包，macOS Gatekeeper 仍可能会阻止直接打开。遇到这种情况时，可以按下面步骤处理：
 
 1. 在 `Applications` 中找到 `Cue3.app`
 2. 右键应用，选择 `打开`
@@ -57,7 +57,18 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project Cue
 
 如果仍然被拦截，可以到 `系统设置 > 隐私与安全性`，在安全提示区域手动允许打开 `Cue3`。
 
-首次使用涉及选中文本捕获、全局快捷键等能力时，系统还可能要求你授予辅助功能等权限。
+首次使用涉及选中文本捕获、全局快捷键等能力时，系统还可能要求你授予辅助功能等权限。请确认授权的是 `/Applications/Cue3.app`，不要授权下载目录、解压目录或历史构建目录里的旧 `Cue3.app`。
+
+如果已经授予辅助功能权限，但 Cue3 仍然反复提示需要授权，可以按下面步骤重置：
+
+1. 退出 Cue3
+2. 打开 `系统设置 > 隐私与安全性 > 辅助功能`
+3. 删除列表里已有的 `Cue3` 项
+4. 确认当前下载的 `Cue3.app` 已拖入 `/Applications`
+5. 重新打开 `/Applications/Cue3.app`
+6. 在辅助功能列表里重新开启 `Cue3`
+
+如果更新到新版本后再次出现权限提示，请重复上面的重置步骤。未使用 Developer ID 签名与公证前，不同发布包的系统权限身份可能不会被 macOS 视为同一个可信应用。
 
 ## 仓库结构
 
