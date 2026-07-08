@@ -599,26 +599,10 @@ private struct AppIconImage: View {
     let size: CGFloat
 
     var body: some View {
-        if let appIcon {
-            Image(nsImage: appIcon)
-                .resizable()
-                .interpolation(.high)
-                .frame(width: size, height: size)
-                .clipShape(RoundedRectangle(cornerRadius: size * 0.22, style: .continuous))
-                .shadow(color: .black.opacity(0.08), radius: 10, y: 4)
-        } else {
-            RoundedRectangle(cornerRadius: size * 0.22, style: .continuous)
-                .fill(Color.accentColor.opacity(0.12))
-                .frame(width: size, height: size)
-                .overlay {
-                    Image(systemName: "app.fill")
-                        .font(.system(size: size * 0.34, weight: .medium))
-                        .foregroundStyle(Color.accentColor)
-                }
-        }
-    }
-
-    private var appIcon: NSImage? {
-        NSApp.applicationIconImage
+        Image("AppIconPreview")
+            .resizable()
+            .interpolation(.high)
+            .aspectRatio(1, contentMode: .fit)
+            .frame(width: size, height: size)
     }
 }
