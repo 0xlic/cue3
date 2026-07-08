@@ -523,18 +523,19 @@ private struct CueItemRow: View {
             }
 
             if isEditingAnnotation {
-                HStack(alignment: .firstTextBaseline, spacing: 0) {
+                HStack(alignment: .top, spacing: 0) {
                     Text("批注：")
                         .font(.callout)
                         .foregroundStyle(.secondary)
+                        .padding(.top, 6)
 
-                    PlainAnnotationTextField(
+                    PlainAnnotationTextView(
                         placeholder: "",
                         text: $annotationDraft,
                         isFocused: $annotationFocused
                     )
                     .font(.callout)
-                    .frame(maxWidth: .infinity)
+                    .frame(maxWidth: .infinity, minHeight: 72)
                 }
                 .transition(.asymmetric(
                     insertion: .opacity.combined(with: .move(edge: .top)),
@@ -636,33 +637,43 @@ struct ScrollIndicatorDisabler: NSViewRepresentable {
 }
 
 @MainActor
-private struct PlainAnnotationTextField: NSViewRepresentable {
+private struct PlainAnnotationTextView: NSViewRepresentable {
     let placeholder: String
     @Binding var text: String
     @Binding var isFocused: Bool
 
-    func makeNSView(context: Context) -> NSTextField {
-        let textField = NSTextField()
-        textField.delegate = context.coordinator
-        textField.isBordered = false
-        textField.isBezeled = false
-        textField.drawsBackground = false
-        textField.focusRingType = .none
-        textField.placeholderString = placeholder
-        textField.font = .preferredFont(forTextStyle: .callout)
-        textField.textColor = .secondaryLabelColor
-        textField.lineBreakMode = .byWordWrapping
-        textField.maximumNumberOfLines = 4
-        textField.cell?.wraps = true
-        textField.cell?.isScrollable = false
-        return textField
+    func makeNSView(context: Context) -> NSScrollView {
+        let textView = NSTextView()
+        textView.delegate = context.coordinator
+        textView.isRichText = false
+        textView.importsGraphics = false
+        textView.allowsUndo = true
+        textView.drawsBackground = false
+        textView.font = .preferredFont(forTextStyle: .callout)
+        textView.textColor = .secondaryLabelColor
+        textView.textContainerInset = NSSize(width: 0, height: 4)
+        textView.textContainer?.lineFragmentPadding = 0
+        textView.textContainer?.widthTracksTextView = true
+        textView.isVerticallyResizable = true
+        textView.isHorizontallyResizable = false
+        textView.autoresizingMask = [.width]
+        textView.string = text
+
+        let scrollView = NSScrollView()
+        scrollView.drawsBackground = false
+        scrollView.borderType = .noBorder
+        scrollView.hasVerticalScroller = false
+        scrollView.hasHorizontalScroller = false
+        scrollView.autohidesScrollers = true
+        scrollView.documentView = textView
+        return scrollView
     }
 
-    func updateNSView(_ textField: NSTextField, context: Context) {
-        if textField.stringValue != text {
-            textField.stringValue = text
+    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        guard let textView = scrollView.documentView as? NSTextView else { return }
+        if textView.string != text {
+            textView.string = text
         }
-        textField.placeholderString = placeholder
         guard isFocused else {
             context.coordinator.didApplyProgrammaticFocus = false
             return
@@ -670,15 +681,13 @@ private struct PlainAnnotationTextField: NSViewRepresentable {
         guard !context.coordinator.didApplyProgrammaticFocus else { return }
         context.coordinator.didApplyProgrammaticFocus = true
         DispatchQueue.main.async {
-            guard let window = textField.window else {
+            guard let window = textView.window else {
                 context.coordinator.didApplyProgrammaticFocus = false
                 return
             }
-            window.makeFirstResponder(textField)
-            if let editor = textField.currentEditor() {
-                let endLocation = (textField.stringValue as NSString).length
-                editor.selectedRange = NSRange(location: endLocation, length: 0)
-            }
+            window.makeFirstResponder(textView)
+            let endLocation = (textView.string as NSString).length
+            textView.selectedRange = NSRange(location: endLocation, length: 0)
         }
     }
 
@@ -687,7 +696,7 @@ private struct PlainAnnotationTextField: NSViewRepresentable {
     }
 
     @MainActor
-    final class Coordinator: NSObject, NSTextFieldDelegate {
+    final class Coordinator: NSObject, NSTextViewDelegate {
         @Binding private var text: String
         @Binding private var isFocused: Bool
         var didApplyProgrammaticFocus = false
@@ -697,16 +706,16 @@ private struct PlainAnnotationTextField: NSViewRepresentable {
             _isFocused = isFocused
         }
 
-        func controlTextDidChange(_ notification: Notification) {
-            guard let textField = notification.object as? NSTextField else { return }
-            text = textField.stringValue
+        func textDidChange(_ notification: Notification) {
+            guard let textView = notification.object as? NSTextView else { return }
+            text = textView.string
         }
 
-        func controlTextDidBeginEditing(_ notification: Notification) {
+        func textDidBeginEditing(_ notification: Notification) {
             isFocused = true
         }
 
-        func controlTextDidEndEditing(_ notification: Notification) {
+        func textDidEndEditing(_ notification: Notification) {
             didApplyProgrammaticFocus = false
             isFocused = false
         }
