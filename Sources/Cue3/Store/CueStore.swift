@@ -38,6 +38,7 @@ final class CueStore {
     private let context: ModelContext
     private let now: () -> Date
     private let cuePromptProvider: () -> String
+    private let outputFormatter: CueOutputFormatter
 
     private(set) var cues: [CueRecord] = []
     private(set) var items: [CueItemRecord] = []
@@ -47,11 +48,13 @@ final class CueStore {
     init(
         context: ModelContext,
         now: @escaping () -> Date = Date.init,
-        cuePromptProvider: @escaping () -> String = { AppSettings.defaultCuePrompt }
+        cuePromptProvider: @escaping () -> String = { CueOutputFormatter.defaultPrompt },
+        outputFormatter: CueOutputFormatter = CueOutputFormatter()
     ) {
         self.context = context
         self.now = now
         self.cuePromptProvider = cuePromptProvider
+        self.outputFormatter = outputFormatter
 
         do {
             try reload(repairingCurrent: true)
@@ -341,19 +344,12 @@ final class CueStore {
     func cueOutputText(cueID: UUID) throws -> String {
         let output = try outputText(cueID: cueID)
         let template = cuePromptProvider().trimmingCharacters(in: .whitespacesAndNewlines)
-        let resolvedTemplate = template.isEmpty ? AppSettings.defaultCuePrompt : template
-        if resolvedTemplate.contains(AppSettings.cuePlaceholder) {
-            return resolvedTemplate.replacingOccurrences(
-                of: AppSettings.cuePlaceholder,
-                with: output
-            )
-        }
-
-        return """
-        \(resolvedTemplate)
-
-        \(output)
-        """
+        let resolvedTemplate = template.isEmpty ? CueOutputFormatter.defaultPrompt : template
+        return outputFormatter.applyTemplate(
+            resolvedTemplate,
+            placeholder: CueOutputFormatter.cuePlaceholder,
+            to: output
+        )
     }
 
     func delete(cueID: UUID) throws {
@@ -525,19 +521,19 @@ final class CueStore {
     }
 
     private func formattedOutput(for cue: CueRecord) -> String {
-        orderedItems(for: cue)
-            .map { item in
-                var lines = [item.quoteText]
-                if let annotation = item.annotationText, !annotation.isEmpty {
-                    lines.append("批注：\(annotation)")
-                }
-                return lines.joined(separator: "\n")
+        outputFormatter.format(
+            items: orderedItems(for: cue).map { item in
+                CueOutputFormatter.Item(
+                    quoteText: item.quoteText,
+                    annotationText: item.annotationText
+                )
             }
-            .joined(separator: "\n\n")
+        )
     }
 
     private func stateRecord() -> AppStateRecord {
-        if let existing = try? context.fetch(FetchDescriptor<AppStateRecord>()).first {
+        if let existing = try? context.fetch(FetchDescriptor<AppStateRecord>())
+            .first(where: { $0.key == "main" }) {
             return existing
         }
         let state = AppStateRecord()
@@ -561,10 +557,22 @@ final class CueStore {
     private func reload(repairingCurrent: Bool) throws {
         cues = try context.fetch(FetchDescriptor<CueRecord>())
         items = try context.fetch(FetchDescriptor<CueItemRecord>())
-        let state = try context.fetch(FetchDescriptor<AppStateRecord>()).first
-        currentCueID = state?.currentCueID
+        let stateRecords = try context.fetch(FetchDescriptor<AppStateRecord>())
+        let mainStateRecords = stateRecords.filter { $0.key == "main" }
+        let state = mainStateRecords.first
+        currentCueID = mainStateRecords.count == 1 ? state?.currentCueID : nil
 
         guard repairingCurrent else { return }
+
+        var didRepair = false
+        let cueIDs = Set(cues.map(\.id))
+        let orphanedItems = items.filter { !cueIDs.contains($0.cueID) }
+        if !orphanedItems.isEmpty {
+            orphanedItems.forEach(context.delete)
+            let orphanedIDs = Set(orphanedItems.map(\.id))
+            items.removeAll { orphanedIDs.contains($0.id) }
+            didRepair = true
+        }
 
         let currentCandidates = sortedRecent(cues.filter { $0.status == .current })
         let validCurrent = currentCueID.flatMap { id in
@@ -579,13 +587,25 @@ final class CueStore {
                 guard let repairedID else { return true }
                 return cue.id != repairedID
             }
-            .forEach { archive($0, at: timestamp) }
+            .forEach {
+                archive($0, at: timestamp)
+                didRepair = true
+            }
+
+        if mainStateRecords.count > 1 {
+            mainStateRecords.dropFirst().forEach(context.delete)
+            didRepair = true
+        }
 
         if repairedID != currentCueID {
             stateRecord().currentCueID = repairedID
-            try context.save()
-            currentCueID = repairedID
+            didRepair = true
         }
+
+        if didRepair {
+            try context.save()
+        }
+        currentCueID = repairedID
     }
 
     private static let cueLifetime: TimeInterval = 24 * 60 * 60

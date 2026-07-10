@@ -80,13 +80,9 @@ final class AppSettings {
         }
     }
 
-    nonisolated static let cuePlaceholder = "{{Cue}}"
+    nonisolated static let cuePlaceholder = CueOutputFormatter.cuePlaceholder
     nonisolated static let defaultCleanupDescription = "24 小时（默认）"
-    nonisolated static let defaultCuePrompt = """
-    下面的内容是我标记的重点内容，以及我自己的批注：
-
-    {{Cue}}
-    """
+    nonisolated static let defaultCuePrompt = CueOutputFormatter.defaultPrompt
 
     private static func normalizedCuePrompt(_ prompt: String?) -> String {
         guard let prompt,
@@ -122,7 +118,9 @@ final class AppSettings {
     var launchAtLoginEnabled: Bool {
         didSet {
             userDefaults.set(launchAtLoginEnabled, forKey: StorageKey.launchAtLoginEnabled)
-            onLaunchAtLoginChanged?(launchAtLoginEnabled)
+            if !isReconcilingLaunchAtLogin {
+                onLaunchAtLoginChanged?(launchAtLoginEnabled)
+            }
         }
     }
 
@@ -140,31 +138,29 @@ final class AppSettings {
 
     var openShortcut: ShortcutConfiguration? {
         didSet {
-            persistShortcut(openShortcut, for: .open)
-            notifyShortcutChange()
+            shortcutDidChange(for: .open, oldValue: oldValue)
         }
     }
 
     var newCueShortcut: ShortcutConfiguration? {
         didSet {
-            persistShortcut(newCueShortcut, for: .newCue)
-            notifyShortcutChange()
+            shortcutDidChange(for: .newCue, oldValue: oldValue)
         }
     }
 
     var captureShortcut: ShortcutConfiguration? {
         didSet {
-            persistShortcut(captureShortcut, for: .capture)
-            notifyShortcutChange()
+            shortcutDidChange(for: .capture, oldValue: oldValue)
         }
     }
 
     var cueShortcut: ShortcutConfiguration? {
         didSet {
-            persistShortcut(cueShortcut, for: .cue)
-            notifyShortcutChange()
+            shortcutDidChange(for: .cue, oldValue: oldValue)
         }
     }
+
+    private(set) var systemErrorMessage: String?
 
     var onShortcutsChanged: (() -> Void)?
     var onAppearanceModeChanged: ((AppearanceMode) -> Void)?
@@ -173,6 +169,8 @@ final class AppSettings {
     private(set) var didCompleteInitialLaunch: Bool
 
     private let userDefaults: UserDefaults
+    private var isApplyingShortcutChange = false
+    private var isReconcilingLaunchAtLogin = false
 
     init(userDefaults: UserDefaults = .standard) {
         self.userDefaults = userDefaults
@@ -194,6 +192,7 @@ final class AppSettings {
         if storedCuePrompt != initialCuePrompt {
             userDefaults.set(initialCuePrompt, forKey: StorageKey.cuePrompt)
         }
+        sanitizeLoadedShortcuts()
     }
 
     var resolvedCuePromptTemplate: String {
@@ -247,6 +246,23 @@ final class AppSettings {
         cuePrompt = Self.defaultCuePrompt
     }
 
+    func reconcileLaunchAtLogin(enabled: Bool, errorMessage: String? = nil) {
+        isReconcilingLaunchAtLogin = true
+        launchAtLoginEnabled = enabled
+        isReconcilingLaunchAtLogin = false
+        if let errorMessage {
+            presentSystemError(errorMessage)
+        }
+    }
+
+    func presentSystemError(_ message: String) {
+        systemErrorMessage = message
+    }
+
+    func clearSystemError() {
+        systemErrorMessage = nil
+    }
+
     var duplicateShortcutWarning: String? {
         let actions = MenuAction.allCases
         let assignedActions = actions.compactMap { action in
@@ -282,6 +298,88 @@ final class AppSettings {
 
     private func notifyShortcutChange() {
         onShortcutsChanged?()
+    }
+
+    private func shortcutDidChange(
+        for action: MenuAction,
+        oldValue: ShortcutConfiguration?
+    ) {
+        guard !isApplyingShortcutChange else { return }
+
+        if let validationMessage = shortcutValidationMessage(
+            shortcut(for: action),
+            for: action
+        ) {
+            isApplyingShortcutChange = true
+            assignShortcut(oldValue, for: action)
+            isApplyingShortcutChange = false
+            presentSystemError(validationMessage)
+            return
+        }
+
+        persistShortcut(shortcut(for: action), for: action)
+        notifyShortcutChange()
+    }
+
+    private func shortcutValidationMessage(
+        _ shortcut: ShortcutConfiguration?,
+        for action: MenuAction
+    ) -> String? {
+        guard let shortcut else { return nil }
+        guard shortcut.modifiers.hasGlobalHotKeyModifier else {
+            return "“\(action.title)”快捷键至少需要包含 Command、Control 或 Option 中的一个修饰键。"
+        }
+
+        if let conflictingAction = MenuAction.allCases.first(where: { candidate in
+            candidate != action && self.shortcut(for: candidate) == shortcut
+        }) {
+            return "“\(action.title)”与“\(conflictingAction.title)”不能使用相同的全局快捷键。"
+        }
+        return nil
+    }
+
+    private func sanitizeLoadedShortcuts() {
+        var usedShortcuts = Set<ShortcutConfiguration>()
+        isApplyingShortcutChange = true
+        defer { isApplyingShortcutChange = false }
+
+        for action in MenuAction.allCases {
+            let loaded = shortcut(for: action)
+            let resolved: ShortcutConfiguration?
+            if let loaded,
+               loaded.modifiers.hasGlobalHotKeyModifier,
+               !usedShortcuts.contains(loaded) {
+                resolved = loaded
+                usedShortcuts.insert(loaded)
+            } else if loaded == nil {
+                resolved = nil
+            } else {
+                let defaultShortcut = action.defaultShortcut
+                resolved = usedShortcuts.contains(defaultShortcut) ? nil : defaultShortcut
+                if let resolved {
+                    usedShortcuts.insert(resolved)
+                }
+            }
+
+            assignShortcut(resolved, for: action)
+            persistShortcut(resolved, for: action)
+        }
+    }
+
+    private func assignShortcut(
+        _ shortcut: ShortcutConfiguration?,
+        for action: MenuAction
+    ) {
+        switch action {
+        case .open:
+            openShortcut = shortcut
+        case .newCue:
+            newCueShortcut = shortcut
+        case .capture:
+            captureShortcut = shortcut
+        case .cue:
+            cueShortcut = shortcut
+        }
     }
 
     private static func loadShortcut(
@@ -423,6 +521,10 @@ struct ShortcutModifiers: Codable, Equatable, Hashable {
         [command, option, control, shift]
             .map { $0 ? "1" : "0" }
             .joined()
+    }
+
+    var hasGlobalHotKeyModifier: Bool {
+        command || option || control
     }
 }
 

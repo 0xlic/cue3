@@ -27,9 +27,9 @@ Cue3 用来临时保存这些值得继续追问的片段，并附上你的批注
 
 开发环境：
 
-- `macOS 14+`
-- `Xcode 15.4+`
-- `Swift 5.10`
+- `macOS 15+`
+- `Xcode 26.5+`
+- `Swift 5` 语言模式
 
 使用 Xcode 打开 `Cue3.xcodeproj`，选择 `Cue3` scheme 运行。
 
@@ -39,17 +39,20 @@ Cue3 用来临时保存这些值得继续追问的片段，并附上你的批注
 
 ```bash
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project Cue3.xcodeproj -scheme Cue3 -configuration Debug build
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project Cue3.xcodeproj -scheme Cue3 -configuration Debug -destination "platform=macOS" test
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project Cue3.xcodeproj -scheme Cue3 -configuration Release build
 DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project Cue3.xcodeproj -scheme Cue3 -configuration Release build CODE_SIGNING_ALLOWED=NO
 ```
 
-本仓库的 CI 和发布都以 `Cue3.xcodeproj` 为准，不把 `swift build` / `swift test` 作为主要验收路径。
+本仓库的构建、测试、CI 和发布都以 `Cue3.xcodeproj` 为准，不把 `swift build` / `swift test` 作为主要验收路径。
 
 ## 下载与打开
 
 如果你是从 GitHub Release 下载应用，请先将 `Cue3.app` 拖到 `Applications`。
 
-当前公开发布包使用 ad-hoc 签名，但还不是 Apple Developer ID 签名与公证包，macOS Gatekeeper 仍可能会阻止直接打开。遇到这种情况时，可以按下面步骤处理：
+发布 workflow 支持两种模式：维护者配置完整 Apple 凭据时生成 Developer ID 签名并公证的包；未配置凭据时继续生成 ad-hoc 签名且未公证的包。具体模式会写在每个 GitHub Release 的说明中。
+
+如果 Release 说明标记为 ad-hoc 签名，macOS Gatekeeper 仍可能阻止直接打开。遇到这种情况时，可以按下面步骤处理：
 
 1. 在 `Applications` 中找到 `Cue3.app`
 2. 右键应用，选择 `打开`
@@ -68,13 +71,16 @@ DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project Cue
 5. 重新打开 `/Applications/Cue3.app`
 6. 在辅助功能列表里重新开启 `Cue3`
 
-如果更新到新版本后再次出现权限提示，请重复上面的重置步骤。未使用 Developer ID 签名与公证前，不同发布包的系统权限身份可能不会被 macOS 视为同一个可信应用。
+如果更新到新版本后再次出现权限提示，请重复上面的重置步骤。ad-hoc 签名的不同发布包可能不会被 macOS 视为同一个可信应用；Developer ID 签名与公证可以显著降低这个问题。
+
+维护者配置签名与公证所需的 GitHub Secrets 见 [签名与公证说明](docs/releases/signing-and-notarization.md)。
 
 ## 仓库结构
 
 ```text
 .
 ├── image/            # 源图标和 README 展示图
+├── docs/             # 架构决策与发布说明
 ├── Sources/          # 应用入口、业务规则、存储和界面
 ├── Tests/            # XCTest 测试
 ├── Assets.xcassets/  # 应用图标资源

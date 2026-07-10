@@ -12,15 +12,24 @@ final class SelectionCaptureService {
 
     enum CaptureError: LocalizedError {
         case accessibilityPermissionRequired
+        case captureInProgress
+        case captureModifiersStillPressed
         case noTargetApplication
+        case targetActivationFailed
         case noSelectedText
 
         var errorDescription: String? {
             switch self {
             case .accessibilityPermissionRequired:
                 return "Cue3 还没有获得辅助功能权限。请到系统设置里为当前打开的 Cue3 打开权限后再试一次。"
+            case .captureInProgress:
+                return "上一次文本捕获仍在进行，请稍后再试。"
+            case .captureModifiersStillPressed:
+                return "捕获快捷键仍处于按下状态，请松开按键后再试。"
             case .noTargetApplication:
                 return "找不到可捕获文本的前台应用。"
+            case .targetActivationFailed:
+                return "无法切换到需要捕获文本的应用，未执行复制。"
             case .noSelectedText:
                 return "没有可捕获的选中文本。"
             }
@@ -28,6 +37,7 @@ final class SelectionCaptureService {
     }
 
     private let logger = Logger(subsystem: "com.0xlic.cue3", category: "SelectionCapture")
+    private var isCapturing = false
 
     func captureSelectedText(
         from application: NSRunningApplication?,
@@ -37,6 +47,11 @@ final class SelectionCaptureService {
             logger.error("capture failed source=\(source.rawValue, privacy: .public) reason=noTargetApplication frontmost=\(self.frontmostDescription(), privacy: .public)")
             throw CaptureError.noTargetApplication
         }
+        guard !isCapturing else {
+            throw CaptureError.captureInProgress
+        }
+        isCapturing = true
+        defer { isCapturing = false }
 
         let axTrusted = AXIsProcessTrusted()
         let identity = currentProcessIdentityDescription()
@@ -54,8 +69,23 @@ final class SelectionCaptureService {
         }
         logger.notice("capture accessibility empty source=\(source.rawValue, privacy: .public) target=\(self.applicationDescription(application), privacy: .public)")
 
-        let modifiersCleared = await waitForCaptureModifiersToClear()
+        let modifiersCleared = try await waitForCaptureModifiersToClear()
         logger.notice("capture modifiers source=\(source.rawValue, privacy: .public) cleared=\(modifiersCleared) modifiers=\(self.modifierDescription(), privacy: .public)")
+        guard modifiersCleared else {
+            throw CaptureError.captureModifiersStillPressed
+        }
+
+        if !isFrontmost(application) {
+            guard application.activate(options: []) else {
+                logger.error("capture failed source=\(source.rawValue, privacy: .public) reason=targetActivationFailed target=\(self.applicationDescription(application), privacy: .public)")
+                throw CaptureError.targetActivationFailed
+            }
+            try await Task.sleep(nanoseconds: 120_000_000)
+            guard isFrontmost(application) else {
+                logger.error("capture failed source=\(source.rawValue, privacy: .public) reason=targetNotFrontmost target=\(self.applicationDescription(application), privacy: .public) frontmost=\(self.frontmostDescription(), privacy: .public)")
+                throw CaptureError.targetActivationFailed
+            }
+        }
 
         let pasteboard = NSPasteboard.general
         let snapshot = PasteboardSnapshot(pasteboard: pasteboard)
@@ -63,17 +93,22 @@ final class SelectionCaptureService {
 
         pasteboard.clearContents()
         let emptyChangeCount = pasteboard.changeCount
-
-        application.activate(options: [])
-        try await Task.sleep(nanoseconds: 120_000_000)
-        logger.notice("capture activated source=\(source.rawValue, privacy: .public) target=\(self.applicationDescription(application), privacy: .public) frontmost=\(self.frontmostDescription(), privacy: .public) changeCount=\(pasteboard.changeCount)")
+        var restorationChangeCount = emptyChangeCount
+        defer {
+            if pasteboard.changeCount == restorationChangeCount {
+                snapshot.restore(to: pasteboard)
+            } else {
+                logger.notice("capture pasteboard restore skipped source=\(source.rawValue, privacy: .public) reason=clipboardChanged expected=\(restorationChangeCount) actual=\(pasteboard.changeCount)")
+            }
+        }
 
         postCommandC()
 
-        let didChange = await waitForPasteboardChange(
+        let didChange = try await waitForPasteboardChange(
             pasteboard,
             originalChangeCount: emptyChangeCount
         )
+        restorationChangeCount = pasteboard.changeCount
         let capturedText = didChange ? pasteboard.string(forType: .string) : nil
         let capturedLength = capturedText?.count ?? 0
         let pasteboardTypes = pasteboard.pasteboardItems?
@@ -82,7 +117,6 @@ final class SelectionCaptureService {
             .joined(separator: ",") ?? "none"
 
         logger.notice("capture pasteboard result source=\(source.rawValue, privacy: .public) didChange=\(didChange) changeCount=\(pasteboard.changeCount) textLength=\(capturedLength) types=\(pasteboardTypes, privacy: .public)")
-        snapshot.restore(to: pasteboard)
 
         guard let capturedText,
               !capturedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -96,25 +130,29 @@ final class SelectionCaptureService {
     private func waitForPasteboardChange(
         _ pasteboard: NSPasteboard,
         originalChangeCount: Int
-    ) async -> Bool {
+    ) async throws -> Bool {
         for _ in 0..<16 {
             if pasteboard.changeCount != originalChangeCount {
                 return true
             }
-            try? await Task.sleep(nanoseconds: 50_000_000)
+            try await Task.sleep(nanoseconds: 50_000_000)
         }
         return pasteboard.changeCount != originalChangeCount
     }
 
-    private func waitForCaptureModifiersToClear() async -> Bool {
+    private func waitForCaptureModifiersToClear() async throws -> Bool {
         let captureModifiers: NSEvent.ModifierFlags = [.control, .option]
         for _ in 0..<25 {
             if NSEvent.modifierFlags.intersection(captureModifiers).isEmpty {
                 return true
             }
-            try? await Task.sleep(nanoseconds: 40_000_000)
+            try await Task.sleep(nanoseconds: 40_000_000)
         }
         return NSEvent.modifierFlags.intersection(captureModifiers).isEmpty
+    }
+
+    private func isFrontmost(_ application: NSRunningApplication) -> Bool {
+        NSWorkspace.shared.frontmostApplication?.processIdentifier == application.processIdentifier
     }
 
     private func selectedTextViaAccessibility(from application: NSRunningApplication) -> String? {

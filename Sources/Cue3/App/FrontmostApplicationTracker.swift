@@ -17,7 +17,9 @@ final class FrontmostApplicationTracker {
             guard let application = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else {
                 return
             }
-            self?.update(with: application)
+            Task { @MainActor [weak self] in
+                self?.update(with: application)
+            }
         }
     }
 

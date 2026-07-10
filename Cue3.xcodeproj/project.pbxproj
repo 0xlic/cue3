@@ -8,6 +8,14 @@
 
 /* Begin PBXBuildFile section */
 		100000000000000000000113 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000014 /* Assets.xcassets */; };
+		100000000000000000000114 /* Sources/Cue3/App/CueActionCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000015 /* Sources/Cue3/App/CueActionCoordinator.swift */; };
+		100000000000000000000115 /* Sources/Cue3/App/CuePasteService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000016 /* Sources/Cue3/App/CuePasteService.swift */; };
+		100000000000000000000116 /* Tests/Cue3Tests/AppSettingsTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000017 /* Tests/Cue3Tests/AppSettingsTests.swift */; };
+		100000000000000000000117 /* Tests/Cue3Tests/CueStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000018 /* Tests/Cue3Tests/CueStoreTests.swift */; };
+		100000000000000000000118 /* Sources/Cue3/App/SystemIntegrationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000020 /* Sources/Cue3/App/SystemIntegrationCoordinator.swift */; };
+		100000000000000000000119 /* Sources/Cue3/Store/CueOutputFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000021 /* Sources/Cue3/Store/CueOutputFormatter.swift */; };
+		100000000000000000000120 /* Sources/Cue3/Views/NonActivatingOutputButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000022 /* Sources/Cue3/Views/NonActivatingOutputButton.swift */; };
+		100000000000000000000121 /* Sources/Cue3/Views/ScrollIndicatorDisabler.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000023 /* Sources/Cue3/Views/ScrollIndicatorDisabler.swift */; };
 		100000000000000000000111 /* Sources/Cue3/App/AppSettings.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000011 /* Sources/Cue3/App/AppSettings.swift */; };
 		100000000000000000000101 /* Sources/Cue3/App/Cue3App.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000001 /* Sources/Cue3/App/Cue3App.swift */; };
 		100000000000000000000102 /* Sources/Cue3/App/FrontmostApplicationTracker.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000002 /* Sources/Cue3/App/FrontmostApplicationTracker.swift */; };
@@ -21,6 +29,16 @@
 		100000000000000000000110 /* Sources/Cue3/Views/MainPanelView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000010 /* Sources/Cue3/Views/MainPanelView.swift */; };
 		100000000000000000000112 /* Sources/Cue3/Views/SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 100000000000000000000013 /* Sources/Cue3/Views/SettingsView.swift */; };
 /* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		100000000000000000000901 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 100000000000000000000501 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 100000000000000000000401;
+			remoteInfo = Cue3;
+		};
+/* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
 		100000000000000000000001 /* Sources/Cue3/App/Cue3App.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Cue3/App/Cue3App.swift; sourceTree = "<group>"; };
@@ -37,10 +55,26 @@
 		100000000000000000000012 /* Cue3.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Cue3.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		100000000000000000000013 /* Sources/Cue3/Views/SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Cue3/Views/SettingsView.swift; sourceTree = "<group>"; };
 		100000000000000000000014 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		100000000000000000000015 /* Sources/Cue3/App/CueActionCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Cue3/App/CueActionCoordinator.swift; sourceTree = "<group>"; };
+		100000000000000000000016 /* Sources/Cue3/App/CuePasteService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Cue3/App/CuePasteService.swift; sourceTree = "<group>"; };
+		100000000000000000000017 /* Tests/Cue3Tests/AppSettingsTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/Cue3Tests/AppSettingsTests.swift; sourceTree = "<group>"; };
+		100000000000000000000018 /* Tests/Cue3Tests/CueStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/Cue3Tests/CueStoreTests.swift; sourceTree = "<group>"; };
+		100000000000000000000019 /* Cue3Tests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = Cue3Tests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		100000000000000000000020 /* Sources/Cue3/App/SystemIntegrationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Cue3/App/SystemIntegrationCoordinator.swift; sourceTree = "<group>"; };
+		100000000000000000000021 /* Sources/Cue3/Store/CueOutputFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Cue3/Store/CueOutputFormatter.swift; sourceTree = "<group>"; };
+		100000000000000000000022 /* Sources/Cue3/Views/NonActivatingOutputButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Cue3/Views/NonActivatingOutputButton.swift; sourceTree = "<group>"; };
+		100000000000000000000023 /* Sources/Cue3/Views/ScrollIndicatorDisabler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/Cue3/Views/ScrollIndicatorDisabler.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		100000000000000000000201 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		100000000000000000000204 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -68,6 +102,7 @@
 				100000000000000000000303 /* Models */,
 				100000000000000000000304 /* Store */,
 				100000000000000000000305 /* Views */,
+				100000000000000000000307 /* Tests */,
 				100000000000000000000014 /* Assets.xcassets */,
 				100000000000000000000306 /* Products */,
 			);
@@ -83,6 +118,9 @@
 				100000000000000000000004 /* Sources/Cue3/App/LifecycleCoordinator.swift */,
 				100000000000000000000005 /* Sources/Cue3/App/PanelController.swift */,
 				100000000000000000000006 /* Sources/Cue3/App/SelectionCaptureService.swift */,
+				100000000000000000000015 /* Sources/Cue3/App/CueActionCoordinator.swift */,
+				100000000000000000000016 /* Sources/Cue3/App/CuePasteService.swift */,
+				100000000000000000000020 /* Sources/Cue3/App/SystemIntegrationCoordinator.swift */,
 			);
 			name = App;
 			sourceTree = "<group>";
@@ -99,6 +137,7 @@
 			isa = PBXGroup;
 			children = (
 				100000000000000000000008 /* Sources/Cue3/Store/CueStore.swift */,
+				100000000000000000000021 /* Sources/Cue3/Store/CueOutputFormatter.swift */,
 			);
 			name = Store;
 			sourceTree = "<group>";
@@ -109,6 +148,8 @@
 				100000000000000000000009 /* Sources/Cue3/Views/CueViews.swift */,
 				100000000000000000000010 /* Sources/Cue3/Views/MainPanelView.swift */,
 				100000000000000000000013 /* Sources/Cue3/Views/SettingsView.swift */,
+				100000000000000000000022 /* Sources/Cue3/Views/NonActivatingOutputButton.swift */,
+				100000000000000000000023 /* Sources/Cue3/Views/ScrollIndicatorDisabler.swift */,
 			);
 			name = Views;
 			sourceTree = "<group>";
@@ -117,8 +158,18 @@
 			isa = PBXGroup;
 			children = (
 				100000000000000000000012 /* Cue3.app */,
+				100000000000000000000019 /* Cue3Tests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		100000000000000000000307 /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				100000000000000000000017 /* Tests/Cue3Tests/AppSettingsTests.swift */,
+				100000000000000000000018 /* Tests/Cue3Tests/CueStoreTests.swift */,
+			);
+			name = Tests;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -141,6 +192,23 @@
 			productReference = 100000000000000000000012 /* Cue3.app */;
 			productType = "com.apple.product-type.application";
 		};
+		100000000000000000000402 /* Cue3Tests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 100000000000000000000702 /* Build configuration list for PBXNativeTarget "Cue3Tests" */;
+			buildPhases = (
+				100000000000000000000205 /* Sources */,
+				100000000000000000000204 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				100000000000000000000902 /* PBXTargetDependency */,
+			);
+			name = Cue3Tests;
+			productName = Cue3Tests;
+			productReference = 100000000000000000000019 /* Cue3Tests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -153,6 +221,10 @@
 				TargetAttributes = {
 					100000000000000000000401 = {
 						CreatedOnToolsVersion = 16.0;
+					};
+					100000000000000000000402 = {
+						CreatedOnToolsVersion = 26.5;
+						TestTargetID = 100000000000000000000401;
 					};
 				};
 			};
@@ -169,8 +241,9 @@
 			productRefGroup = 100000000000000000000306 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
-			targets = (
-				100000000000000000000401 /* Cue3 */,
+				targets = (
+					100000000000000000000401 /* Cue3 */,
+					100000000000000000000402 /* Cue3Tests */,
 			);
 		};
 /* End PBXProject section */
@@ -192,10 +265,33 @@
 				100000000000000000000109 /* Sources/Cue3/Views/CueViews.swift in Sources */,
 				100000000000000000000110 /* Sources/Cue3/Views/MainPanelView.swift in Sources */,
 				100000000000000000000112 /* Sources/Cue3/Views/SettingsView.swift in Sources */,
+				100000000000000000000114 /* Sources/Cue3/App/CueActionCoordinator.swift in Sources */,
+				100000000000000000000115 /* Sources/Cue3/App/CuePasteService.swift in Sources */,
+				100000000000000000000118 /* Sources/Cue3/App/SystemIntegrationCoordinator.swift in Sources */,
+				100000000000000000000119 /* Sources/Cue3/Store/CueOutputFormatter.swift in Sources */,
+				100000000000000000000120 /* Sources/Cue3/Views/NonActivatingOutputButton.swift in Sources */,
+				100000000000000000000121 /* Sources/Cue3/Views/ScrollIndicatorDisabler.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		100000000000000000000205 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				100000000000000000000116 /* Tests/Cue3Tests/AppSettingsTests.swift in Sources */,
+				100000000000000000000117 /* Tests/Cue3Tests/CueStoreTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		100000000000000000000902 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 100000000000000000000401 /* Cue3 */;
+			targetProxy = 100000000000000000000901 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		100000000000000000000801 /* Debug */ = {
@@ -375,6 +471,38 @@
 			};
 			name = Release;
 		};
+		100000000000000000000805 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.0xlic.cue3.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Cue3.app/Contents/MacOS/Cue3";
+			};
+			name = Debug;
+		};
+		100000000000000000000806 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.0xlic.cue3.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Cue3.app/Contents/MacOS/Cue3";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -392,6 +520,15 @@
 			buildConfigurations = (
 				100000000000000000000803 /* Debug */,
 				100000000000000000000804 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		100000000000000000000702 /* Build configuration list for PBXNativeTarget "Cue3Tests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				100000000000000000000805 /* Debug */,
+				100000000000000000000806 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Debug;

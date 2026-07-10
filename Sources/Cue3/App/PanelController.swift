@@ -12,6 +12,7 @@ final class PanelState {
     @ObservationIgnored var hidePanel: (() -> Void)?
     @ObservationIgnored var pinnedDidChange: ((Bool) -> Void)?
     @ObservationIgnored var captureSelection: (() -> Void)?
+    @ObservationIgnored var pasteCue: ((UUID) -> Void)?
     @ObservationIgnored var openSettings: (() -> Void)?
 
     init(isPinned: Bool = true) {
@@ -24,7 +25,10 @@ final class PanelState {
     }
 
     var resolvedTargetApplication: NSRunningApplication? {
-        targetApplication ?? fallbackTargetApplication?()
+        CuePasteService.resolveTarget(
+            latestExternalApplication: fallbackTargetApplication?(),
+            rememberedApplication: targetApplication
+        )
     }
 
     func rememberTargetApplication(_ application: NSRunningApplication?) {

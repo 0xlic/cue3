@@ -25,5 +25,8 @@ jobs:
       - name: Xcode Debug build
         run: xcodebuild -project Cue3.xcodeproj -scheme Cue3 -configuration Debug build CODE_SIGNING_ALLOWED=NO
 
+      - name: Xcode tests
+        run: xcodebuild -project Cue3.xcodeproj -scheme Cue3 -configuration Debug -destination "platform=macOS" test CODE_SIGNING_ALLOWED=NO
+
       - name: Xcode Release build
         run: xcodebuild -project Cue3.xcodeproj -scheme Cue3 -configuration Release build CODE_SIGNING_ALLOWED=NO

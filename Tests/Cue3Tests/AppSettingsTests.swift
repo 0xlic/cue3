@@ -83,6 +83,47 @@ final class AppSettingsTests: XCTestCase {
         XCTAssertNil(reloaded.captureShortcut)
     }
 
+    func testShortcutWithoutGlobalModifierIsRejected() {
+        let defaults = makeUserDefaults()
+        let settings = AppSettings(userDefaults: defaults)
+        let original = settings.openShortcut
+
+        settings.setShortcut(
+            ShortcutConfiguration(key: .a, modifiers: ShortcutModifiers()),
+            for: .open
+        )
+
+        XCTAssertEqual(settings.openShortcut, original)
+        XCTAssertNotNil(settings.systemErrorMessage)
+    }
+
+    func testDuplicateShortcutIsRejected() {
+        let defaults = makeUserDefaults()
+        let settings = AppSettings(userDefaults: defaults)
+        let original = settings.openShortcut
+
+        settings.setShortcut(settings.captureShortcut, for: .open)
+
+        XCTAssertEqual(settings.openShortcut, original)
+        XCTAssertNotNil(settings.systemErrorMessage)
+    }
+
+    func testLaunchAtLoginReconciliationDoesNotTriggerChangeCallback() {
+        let defaults = makeUserDefaults()
+        let settings = AppSettings(userDefaults: defaults)
+        var callbackCount = 0
+        settings.onLaunchAtLoginChanged = { _ in callbackCount += 1 }
+
+        settings.reconcileLaunchAtLogin(
+            enabled: true,
+            errorMessage: "需要系统确认"
+        )
+
+        XCTAssertTrue(settings.launchAtLoginEnabled)
+        XCTAssertEqual(callbackCount, 0)
+        XCTAssertEqual(settings.systemErrorMessage, "需要系统确认")
+    }
+
     private func makeUserDefaults() -> UserDefaults {
         let suiteName = "Cue3Tests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!

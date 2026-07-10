@@ -15,7 +15,9 @@ final class LifecycleCoordinator {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.cleanupAndSchedule()
+            Task { @MainActor [weak self] in
+                self?.cleanupAndSchedule()
+            }
         }
         cleanupAndSchedule()
     }
@@ -39,7 +41,9 @@ final class LifecycleCoordinator {
     private func scheduleNextCleanup() {
         cleanupTimer?.invalidate()
         let timer = Timer(fire: Date().addingTimeInterval(60 * 60), interval: 0, repeats: false) { [weak self] _ in
-            self?.cleanupAndSchedule()
+            Task { @MainActor [weak self] in
+                self?.cleanupAndSchedule()
+            }
         }
         cleanupTimer = timer
         RunLoop.main.add(timer, forMode: .common)

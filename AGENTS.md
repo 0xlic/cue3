@@ -27,14 +27,13 @@
 稳定命令：
 
 - Debug 构建：`xcodebuild -project Cue3.xcodeproj -scheme Cue3 -configuration Debug build`
+- XCTest：`xcodebuild -project Cue3.xcodeproj -scheme Cue3 -configuration Debug -destination "platform=macOS" test`
 - Release 构建：`xcodebuild -project Cue3.xcodeproj -scheme Cue3 -configuration Release build`
 - CI 无签名构建：`xcodebuild -project Cue3.xcodeproj -scheme Cue3 -configuration Release build CODE_SIGNING_ALLOWED=NO`
 
 ## 测试
 
-当前以 Xcode 工程构建校验为准。
-
-如后续补充 XCTest 自动化，应优先接入 `xcodebuild test`，避免与 App 实际构建链路分离。
+当前 XCTest 已接入 `Cue3.xcodeproj` 的 `Cue3Tests` target 和共享 scheme，应使用 `xcodebuild test` 运行，避免与 App 实际构建链路分离。
 
 ## CI
 
@@ -42,7 +41,7 @@ GitHub Actions 文件位于 `.github/workflows/`。
 
 当前 workflow 分工如下：
 
-- `ci.yml`：用于 `pull_request` 和 `main` 分支提交校验，仅执行 `xcodebuild` Debug 构建和 `xcodebuild` Release 构建。
+- `ci.yml`：用于 `pull_request` 和 `main` 分支提交校验，执行 `xcodebuild` Debug 构建、XCTest 和 Release 构建。
 - `release.yml`：用于发布打包，仅在推送 `vX.Y.Z` tag 时触发。
 
 发布 workflow 使用标准语义版本 tag：
@@ -55,11 +54,13 @@ GitHub Actions 文件位于 `.github/workflows/`。
 
 - 发版前先确保本地通过 `xcodebuild -project Cue3.xcodeproj -scheme Cue3 -configuration Debug build` 和 `xcodebuild -project Cue3.xcodeproj -scheme Cue3 -configuration Release build`。
 - 使用小写 `v` 前缀创建并推送 tag，例如 `v0.1.0`。
-- `release.yml` 会在 `macos-14` runner 上自动执行归档和打包，不需要手工上传产物。
+- `release.yml` 会在 `macos-26` runner 上使用 Xcode 26.5 自动执行归档和打包，不需要手工上传产物。
 - workflow 会把 tag 中的 `X.Y.Z` 写入 `MARKETING_VERSION`，把 GitHub Actions 运行号写入 `CURRENT_PROJECT_VERSION`。
-- 当前发布产物为未签名、未公证的 macOS zip 包，命名格式为 `Cue3-vX.Y.Z-macOS.zip`。
+- 发布 workflow 在五项 Apple Secrets 全部存在时使用 Developer ID 签名、公证并 stapling；完全未配置时回退为 ad-hoc 签名，部分配置会阻止发布。
+- 签名与公证配置见 `docs/releases/signing-and-notarization.md`。
+- macOS zip 包命名格式为 `Cue3-vX.Y.Z-macOS.zip`。
 - workflow 会同时生成 `Cue3-vX.Y.Z-macOS.sha256.txt` 校验文件，并上传到 GitHub Release。
-- 当前发布方式适合 GitHub Release 分发；用户首次打开时可能需要按 README 指引处理 Gatekeeper。
+- ad-hoc 发布时用户首次打开可能需要按 README 指引处理 Gatekeeper；Developer ID 公证包应直接通过 Gatekeeper 验证。
 
 ## 构建原则
 

@@ -12,6 +12,7 @@ final class GlobalHotKeyController {
 
     private struct HotKey {
         let id: ActionID
+        let action: AppSettings.MenuAction
         let shortcut: ShortcutConfiguration?
         let handler: () -> Void
     }
@@ -20,6 +21,7 @@ final class GlobalHotKeyController {
     private var hotKeyRefs: [EventHotKeyRef?] = []
     private var eventHandlerRef: EventHandlerRef?
     private let signature = fourCharCode("Cue3")
+    private(set) var registrationErrorMessage: String?
 
     init(
         captureShortcut: ShortcutConfiguration?,
@@ -34,21 +36,25 @@ final class GlobalHotKeyController {
         hotKeys = [
             HotKey(
                 id: .capture,
+                action: .capture,
                 shortcut: captureShortcut,
                 handler: captureHandler
             ),
             HotKey(
                 id: .open,
+                action: .open,
                 shortcut: openShortcut,
                 handler: openHandler
             ),
             HotKey(
                 id: .newCue,
+                action: .newCue,
                 shortcut: newCueShortcut,
                 handler: newCueHandler
             ),
             HotKey(
                 id: .cue,
+                action: .cue,
                 shortcut: cueShortcut,
                 handler: cueHandler
             )
@@ -76,17 +82,22 @@ final class GlobalHotKeyController {
         }
 
         hotKeys = [
-            HotKey(id: .capture, shortcut: capture, handler: hotKeys[0].handler),
-            HotKey(id: .open, shortcut: open, handler: hotKeys[1].handler),
-            HotKey(id: .newCue, shortcut: newCue, handler: hotKeys[2].handler),
-            HotKey(id: .cue, shortcut: cue, handler: hotKeys[3].handler)
+            HotKey(id: .capture, action: .capture, shortcut: capture, handler: hotKeys[0].handler),
+            HotKey(id: .open, action: .open, shortcut: open, handler: hotKeys[1].handler),
+            HotKey(id: .newCue, action: .newCue, shortcut: newCue, handler: hotKeys[2].handler),
+            HotKey(id: .cue, action: .cue, shortcut: cue, handler: hotKeys[3].handler)
         ]
         unregisterHotKeys()
         install()
     }
 
     private func install() {
-        installEventHandlerIfNeeded()
+        var failures: [String] = []
+        let handlerStatus = installEventHandlerIfNeeded()
+        guard handlerStatus == noErr else {
+            registrationErrorMessage = "无法安装全局快捷键事件处理器：\(statusDescription(handlerStatus))"
+            return
+        }
 
         for hotKey in hotKeys {
             guard let shortcut = hotKey.shortcut else {
@@ -104,8 +115,13 @@ final class GlobalHotKeyController {
             )
             if status == noErr {
                 hotKeyRefs.append(hotKeyRef)
+            } else {
+                failures.append("\(hotKey.action.title)（\(hotKey.shortcut?.displayString ?? "未设置")）：\(statusDescription(status))")
             }
         }
+        registrationErrorMessage = failures.isEmpty
+            ? nil
+            : "以下全局快捷键未能注册：\(failures.joined(separator: "；"))"
     }
 
     private func unregisterHotKeys() {
@@ -115,9 +131,9 @@ final class GlobalHotKeyController {
         hotKeyRefs.removeAll()
     }
 
-    private func installEventHandlerIfNeeded() {
+    private func installEventHandlerIfNeeded() -> OSStatus {
         guard eventHandlerRef == nil else {
-            return
+            return noErr
         }
 
         var eventType = EventTypeSpec(
@@ -126,7 +142,7 @@ final class GlobalHotKeyController {
         )
         let selfPointer = Unmanaged.passUnretained(self).toOpaque()
 
-        InstallEventHandler(
+        return InstallEventHandler(
             GetApplicationEventTarget(),
             { _, event, userData in
                 guard let event, let userData else {
@@ -150,7 +166,8 @@ final class GlobalHotKeyController {
                 let controller = Unmanaged<GlobalHotKeyController>
                     .fromOpaque(userData)
                     .takeUnretainedValue()
-                guard let actionID = ActionID(rawValue: receivedID.id),
+                guard receivedID.signature == controller.signature,
+                      let actionID = ActionID(rawValue: receivedID.id),
                       let hotKey = controller.hotKeys.first(where: { $0.id == actionID }) else {
                     return noErr
                 }
@@ -165,6 +182,11 @@ final class GlobalHotKeyController {
             selfPointer,
             &eventHandlerRef
         )
+    }
+
+    private func statusDescription(_ status: OSStatus) -> String {
+        let error = NSError(domain: NSOSStatusErrorDomain, code: Int(status))
+        return "\(error.localizedDescription)（\(status)）"
     }
 }
 

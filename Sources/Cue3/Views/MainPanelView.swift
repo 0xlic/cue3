@@ -199,11 +199,14 @@ struct MainPanelView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    private func perform(_ operation: () throws -> Void) {
+    @discardableResult
+    private func perform(_ operation: () throws -> Void) -> Bool {
         do {
             try operation()
+            return true
         } catch {
             store.errorMessage = error.localizedDescription
+            return false
         }
     }
 
@@ -241,8 +244,14 @@ struct MainPanelView: View {
 
     private func saveTitle(for cue: CueRecord) {
         guard isEditingTitle else { return }
-        perform {
+        let didSave = perform {
             try store.updateTitle(cueID: cue.id, titleText: titleDraft)
+        }
+        guard didSave else {
+            DispatchQueue.main.async {
+                titleFocused = true
+            }
+            return
         }
         isEditingTitle = false
         titleFocused = false

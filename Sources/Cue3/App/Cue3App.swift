@@ -1,5 +1,4 @@
 import AppKit
-import ServiceManagement
 import SwiftData
 import SwiftUI
 
@@ -12,128 +11,170 @@ struct Cue3App: App {
     private let store: CueStore
     private let panelController: PanelController
     private let settingsWindowController: SettingsWindowController
-    private let lifecycleCoordinator: LifecycleCoordinator
-    private let applicationTracker: FrontmostApplicationTracker
-    private let selectionCaptureService: SelectionCaptureService
-    private let globalHotKeyController: GlobalHotKeyController
-    private let statusBarController: StatusBarController
+    private let lifecycleCoordinator: LifecycleCoordinator?
+    private let actionCoordinator: CueActionCoordinator
+    private let systemIntegrationCoordinator: SystemIntegrationCoordinator?
+    private let statusBarController: StatusBarController?
 
     init() {
-        do {
-            let storeURL = try Self.modelStoreURL()
-            let configuration = ModelConfiguration(
-                "Cue3",
-                schema: Cue3Schema.schema,
-                url: storeURL
-            )
-            let container = try ModelContainer(
-                for: Cue3Schema.schema,
-                configurations: [configuration]
-            )
-            let settings = AppSettings()
-            let settingsWindowController = SettingsWindowController(settings: settings)
-            let store = CueStore(
-                context: container.mainContext,
-                cuePromptProvider: { settings.resolvedCuePromptTemplate }
-            )
-            let applicationTracker = FrontmostApplicationTracker()
-            let panelController = PanelController(
-                store: store,
-                isPinned: settings.panelIsPinned,
-                onPinnedChange: { [settings] isPinned in
-                    settings.panelIsPinned = isPinned
-                }
-            )
-            panelController.state.fallbackTargetApplication = {
-                applicationTracker.lastExternalApplication
+        let isRunningTests = Self.isRunningTests
+        let container: ModelContainer
+        let startupErrorMessage: String?
+
+        if isRunningTests {
+            do {
+                container = try Self.inMemoryModelContainer(name: "Cue3TestsHost")
+                startupErrorMessage = nil
+            } catch {
+                fatalError("无法创建 Cue3 测试数据容器：\(error.localizedDescription)")
             }
-            let lifecycleCoordinator = LifecycleCoordinator(store: store)
-            Self.applyAppearanceMode(settings.appearanceMode)
-            try? Self.setLaunchAtLogin(enabled: settings.launchAtLoginEnabled)
-            self.container = container
-            self.settings = settings
-            self.store = store
-            self.panelController = panelController
-            self.settingsWindowController = settingsWindowController
-            self.lifecycleCoordinator = lifecycleCoordinator
-            let selectionCaptureService = SelectionCaptureService()
-            self.applicationTracker = applicationTracker
-            self.selectionCaptureService = selectionCaptureService
-            panelController.state.captureSelection = { [store, panelController, applicationTracker, selectionCaptureService] in
-                Task { @MainActor in
-                    await Self.captureSelection(
-                        store: store,
-                        panelController: panelController,
-                        applicationTracker: applicationTracker,
-                        selectionCaptureService: selectionCaptureService,
-                        source: .panel
-                    )
+        } else {
+            do {
+                container = try Self.persistentModelContainer()
+                startupErrorMessage = nil
+            } catch {
+                let persistentError = error
+                do {
+                    container = try Self.inMemoryModelContainer(name: "Cue3Recovery")
+                    startupErrorMessage = "无法打开本地 Cue 数据：\(persistentError.localizedDescription)\n\nCue3 已进入临时模式，本次运行中的更改不会保存。原数据没有被删除；请备份 ~/Library/Application Support/Cue3 后再处理或重建存储。"
+                } catch {
+                    fatalError("持久化和临时数据容器均创建失败：\(error.localizedDescription)")
                 }
             }
-            panelController.state.openSettings = { [weak panelController, settingsWindowController] in
-                settingsWindowController.show(on: panelController?.screen)
+        }
+
+        let settingsDefaults: UserDefaults
+        if isRunningTests {
+            let suiteName = "Cue3Tests.Host"
+            settingsDefaults = UserDefaults(suiteName: suiteName) ?? .standard
+            settingsDefaults.removePersistentDomain(forName: suiteName)
+        } else {
+            settingsDefaults = .standard
+        }
+
+        let settings = AppSettings(userDefaults: settingsDefaults)
+        let settingsWindowController = SettingsWindowController(settings: settings)
+        let store = CueStore(
+            context: container.mainContext,
+            cuePromptProvider: { settings.resolvedCuePromptTemplate }
+        )
+        let applicationTracker = FrontmostApplicationTracker()
+        let panelController = PanelController(
+            store: store,
+            isPinned: settings.panelIsPinned,
+            onPinnedChange: { [settings] isPinned in
+                settings.panelIsPinned = isPinned
             }
-            let globalHotKeyController = GlobalHotKeyController(
-                captureShortcut: settings.captureShortcut,
-                openShortcut: settings.openShortcut,
-                newCueShortcut: settings.newCueShortcut,
-                cueShortcut: settings.cueShortcut,
-                captureHandler: { [store, panelController, applicationTracker, selectionCaptureService] in
-                    Task { @MainActor in
-                        await Self.captureSelection(
-                            store: store,
-                            panelController: panelController,
-                            applicationTracker: applicationTracker,
-                            selectionCaptureService: selectionCaptureService,
-                            source: .hotKey
-                        )
-                    }
+        )
+        panelController.state.fallbackTargetApplication = {
+            applicationTracker.lastExternalApplication
+        }
+
+        let actionCoordinator = CueActionCoordinator(
+            store: store,
+            panelController: panelController,
+            applicationTracker: applicationTracker,
+            selectionCaptureService: SelectionCaptureService(),
+            pasteService: CuePasteService()
+        )
+        panelController.state.captureSelection = { [actionCoordinator] in
+            actionCoordinator.captureSelection(source: .panel)
+        }
+        panelController.state.pasteCue = { [actionCoordinator] cueID in
+            actionCoordinator.pasteCue(cueID: cueID)
+        }
+        panelController.state.openSettings = { [weak panelController, settingsWindowController] in
+            settingsWindowController.show(on: panelController?.screen)
+        }
+
+        Self.applyAppearanceMode(settings.appearanceMode)
+        settings.onAppearanceModeChanged = { appearanceMode in
+            Self.applyAppearanceMode(appearanceMode)
+        }
+
+        let lifecycleCoordinator = isRunningTests ? nil : LifecycleCoordinator(store: store)
+        let systemIntegrationCoordinator: SystemIntegrationCoordinator?
+        let statusBarController: StatusBarController?
+        if isRunningTests {
+            systemIntegrationCoordinator = nil
+            statusBarController = nil
+        } else {
+            systemIntegrationCoordinator = SystemIntegrationCoordinator(
+                settings: settings,
+                captureHandler: { [actionCoordinator] in
+                    actionCoordinator.captureSelection(source: .hotKey)
                 },
                 openHandler: { [store, panelController] in
                     panelController.show(cueID: store.currentCueID, activatingPanel: true)
                 },
-                newCueHandler: { [store, panelController] in
-                    Self.startNewCue(store: store, panelController: panelController)
+                newCueHandler: { [actionCoordinator] in
+                    actionCoordinator.startNewCue()
                 },
-                cueHandler: { [store, panelController, applicationTracker] in
-                    Self.pasteCueOutput(
-                        store: store,
-                        panelController: panelController,
-                        targetApplication: applicationTracker.lastExternalApplication
-                    )
+                cueHandler: { [store, panelController, actionCoordinator] in
+                    guard let cueID = store.currentCueID else {
+                        store.errorMessage = "当前没有可输出的 Cue。"
+                        panelController.show(cueID: nil, activatingPanel: false)
+                        return
+                    }
+                    actionCoordinator.pasteCue(cueID: cueID)
                 }
             )
-            settings.onShortcutsChanged = { [weak globalHotKeyController, weak settings] in
-                guard let globalHotKeyController, let settings else {
-                    return
-                }
-                globalHotKeyController.updateShortcuts(
-                    capture: settings.captureShortcut,
-                    open: settings.openShortcut,
-                    newCue: settings.newCueShortcut,
-                    cue: settings.cueShortcut
-                )
-            }
-            settings.onAppearanceModeChanged = { appearanceMode in
-                Self.applyAppearanceMode(appearanceMode)
-            }
-            settings.onLaunchAtLoginChanged = { enabled in
-                try? Self.setLaunchAtLogin(enabled: enabled)
-            }
-            self.globalHotKeyController = globalHotKeyController
-            self.statusBarController = StatusBarController { [store, panelController] in
+            statusBarController = StatusBarController { [store, panelController] in
                 panelController.show(cueID: store.currentCueID, activatingPanel: true)
             }
+        }
+
+        self.container = container
+        self.settings = settings
+        self.store = store
+        self.panelController = panelController
+        self.settingsWindowController = settingsWindowController
+        self.lifecycleCoordinator = lifecycleCoordinator
+        self.actionCoordinator = actionCoordinator
+        self.systemIntegrationCoordinator = systemIntegrationCoordinator
+        self.statusBarController = statusBarController
+
+        if !isRunningTests {
+            let launchErrorMessage = [
+                startupErrorMessage,
+                systemIntegrationCoordinator?.startupErrorMessage
+            ]
+                .compactMap { $0 }
+                .joined(separator: "\n\n")
             applicationDelegate.handleDidFinishLaunching = { [settings, store, panelController] in
                 Self.completeLaunch(
                     settings: settings,
                     store: store,
-                    panelController: panelController
+                    panelController: panelController,
+                    startupErrorMessage: launchErrorMessage.isEmpty ? nil : launchErrorMessage
                 )
             }
-        } catch {
-            fatalError("无法创建 Cue3 数据容器：\(error.localizedDescription)")
         }
+    }
+
+    private static func persistentModelContainer() throws -> ModelContainer {
+        let storeURL = try modelStoreURL()
+        let configuration = ModelConfiguration(
+            "Cue3",
+            schema: Cue3Schema.schema,
+            url: storeURL
+        )
+        return try Cue3Schema.makeContainer(configurations: [configuration])
+    }
+
+    private static func inMemoryModelContainer(name: String) throws -> ModelContainer {
+        let configuration = ModelConfiguration(
+            name,
+            schema: Cue3Schema.schema,
+            isStoredInMemoryOnly: true
+        )
+        return try Cue3Schema.makeContainer(configurations: [configuration])
+    }
+
+    private static var isRunningTests: Bool {
+        let environment = ProcessInfo.processInfo.environment
+        return environment["CUE3_TESTING"] == "1"
+            || environment["XCTestConfigurationFilePath"] != nil
     }
 
     private static func modelStoreURL() throws -> URL {
@@ -165,97 +206,15 @@ struct Cue3App: App {
         }
     }
 
-    private static func startNewCue(
-        store: CueStore,
-        panelController: PanelController
-    ) {
-        do {
-            let cue = try store.startNewCue()
-            panelController.showNewCue(cueID: cue.id)
-        } catch {
-            store.errorMessage = error.localizedDescription
-        }
-    }
-
-    private static func captureSelection(
-        store: CueStore,
-        panelController: PanelController,
-        applicationTracker: FrontmostApplicationTracker,
-        selectionCaptureService: SelectionCaptureService,
-        source: SelectionCaptureService.CaptureSource
-    ) async {
-        do {
-            let text = try await selectionCaptureService.captureSelectedText(
-                from: applicationTracker.lastExternalApplication,
-                source: source
-            )
-            let item = try store.appendItem(quoteText: text, annotationText: nil)
-            panelController.refreshAfterCapture(cueID: item.cueID)
-        } catch {
-            store.errorMessage = error.localizedDescription
-        }
-    }
-
-    private static func pasteCueOutput(
-        store: CueStore,
-        panelController: PanelController,
-        targetApplication: NSRunningApplication?
-    ) {
-        guard let cueID = store.currentCueID else {
-            store.errorMessage = "当前没有可输出的 Cue。"
-            return
-        }
-        guard let targetApplication else {
-            store.errorMessage = "找不到可粘贴的目标应用。请先切回需要输入的应用后再使用 Cue 快捷键。"
-            return
-        }
-
-        do {
-            let text = try store.cueOutputText(cueID: cueID)
-            NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(text, forType: .string)
-            panelController.hide()
-
-            if isFrontmost(targetApplication) {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
-                    postCommandV()
-                }
-                return
-            }
-
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.08) {
-                let activated = targetApplication.activate(options: [])
-                guard activated else {
-                    store.errorMessage = "无法切回目标应用，未执行粘贴。"
-                    return
-                }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.16) {
-                    postCommandV()
-                }
-            }
-        } catch {
-            store.errorMessage = error.localizedDescription
-        }
-    }
-
     private static func applyAppearanceMode(_ appearanceMode: AppSettings.AppearanceMode) {
         NSApp.appearance = appearanceMode.appearance
-    }
-
-    private static func setLaunchAtLogin(enabled: Bool) throws {
-        if enabled {
-            if SMAppService.mainApp.status != .enabled {
-                try SMAppService.mainApp.register()
-            }
-        } else if SMAppService.mainApp.status == .enabled {
-            try SMAppService.mainApp.unregister()
-        }
     }
 
     private static func completeLaunch(
         settings: AppSettings,
         store: CueStore,
-        panelController: PanelController
+        panelController: PanelController,
+        startupErrorMessage: String?
     ) {
         closeUnexpectedStartupWindows(except: panelController.window)
 
@@ -267,7 +226,10 @@ struct Cue3App: App {
             cueID = store.currentCueID
         }
 
-        if settings.shouldShowMainPanelOnLaunch {
+        if let startupErrorMessage {
+            store.errorMessage = startupErrorMessage
+            panelController.show(cueID: cueID, activatingPanel: true)
+        } else if settings.shouldShowMainPanelOnLaunch {
             panelController.show(cueID: cueID, activatingPanel: true)
         }
 
@@ -280,20 +242,6 @@ struct Cue3App: App {
         }
     }
 
-}
-
-private func postCommandV() {
-    let source = CGEventSource(stateID: .combinedSessionState)
-    let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true)
-    keyDown?.flags = .maskCommand
-    let keyUp = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: false)
-    keyUp?.flags = .maskCommand
-    keyDown?.post(tap: .cghidEventTap)
-    keyUp?.post(tap: .cghidEventTap)
-}
-
-private func isFrontmost(_ application: NSRunningApplication) -> Bool {
-    NSWorkspace.shared.frontmostApplication?.processIdentifier == application.processIdentifier
 }
 
 @MainActor
@@ -410,7 +358,12 @@ private final class StatusBarController {
     @objc
     private func handleClick() {
         if NSApp.currentEvent?.type == .rightMouseUp {
-            statusItem.popUpMenu(menu)
+            guard let button = statusItem.button else { return }
+            menu.popUp(
+                positioning: nil,
+                at: NSPoint(x: 0, y: button.bounds.height + 4),
+                in: button
+            )
             return
         }
         action()

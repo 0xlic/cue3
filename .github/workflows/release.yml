@@ -17,6 +17,11 @@ jobs:
       SCHEME: Cue3
       APP_NAME: Cue3
       DEVELOPER_DIR: /Applications/Xcode_26.5.app/Contents/Developer
+      APPLE_DEVELOPER_ID_CERTIFICATE_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_CERTIFICATE_BASE64 }}
+      APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD }}
+      APPLE_NOTARY_API_KEY_BASE64: ${{ secrets.APPLE_NOTARY_API_KEY_BASE64 }}
+      APPLE_NOTARY_API_KEY_ID: ${{ secrets.APPLE_NOTARY_API_KEY_ID }}
+      APPLE_NOTARY_API_ISSUER_ID: ${{ secrets.APPLE_NOTARY_API_ISSUER_ID }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -42,6 +47,65 @@ jobs:
           echo "version=${VERSION#v}" >> "$GITHUB_OUTPUT"
           echo "build_number=${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
 
+      - name: Detect signing configuration
+        id: signing
+        shell: bash
+        run: |
+          CONFIGURED=0
+          for VALUE in \
+            "$APPLE_DEVELOPER_ID_CERTIFICATE_BASE64" \
+            "$APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD" \
+            "$APPLE_NOTARY_API_KEY_BASE64" \
+            "$APPLE_NOTARY_API_KEY_ID" \
+            "$APPLE_NOTARY_API_ISSUER_ID"
+          do
+            if [[ -n "$VALUE" ]]; then
+              CONFIGURED=$((CONFIGURED + 1))
+            fi
+          done
+
+          if [[ "$CONFIGURED" -eq 0 ]]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          elif [[ "$CONFIGURED" -eq 5 ]]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Developer ID signing configuration is incomplete"
+            exit 1
+          fi
+
+      - name: Import Developer ID certificate
+        if: steps.signing.outputs.enabled == 'true'
+        id: signing-keychain
+        shell: bash
+        run: |
+          KEYCHAIN_PATH="$RUNNER_TEMP/cue3-signing.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 24)"
+          CERTIFICATE_PATH="$RUNNER_TEMP/developer-id.p12"
+
+          echo "::add-mask::$KEYCHAIN_PASSWORD"
+          printf '%s' "$APPLE_DEVELOPER_ID_CERTIFICATE_BASE64" | base64 --decode > "$CERTIFICATE_PATH"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERTIFICATE_PATH" \
+            -k "$KEYCHAIN_PATH" \
+            -P "$APPLE_DEVELOPER_ID_CERTIFICATE_PASSWORD" \
+            -A
+          security set-key-partition-list \
+            -S apple-tool:,apple: \
+            -s \
+            -k "$KEYCHAIN_PASSWORD" \
+            "$KEYCHAIN_PATH"
+          security list-keychains -d user -s "$KEYCHAIN_PATH"
+
+          SIGNING_IDENTITY="$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" | awk '/Developer ID Application/ { print $2; exit }')"
+          if [[ -z "$SIGNING_IDENTITY" ]]; then
+            echo "Developer ID Application identity was not found"
+            exit 1
+          fi
+          echo "identity=$SIGNING_IDENTITY" >> "$GITHUB_OUTPUT"
+          echo "keychain_path=$KEYCHAIN_PATH" >> "$GITHUB_OUTPUT"
+
       - name: Archive app
         run: |
           xcodebuild archive \
@@ -55,6 +119,37 @@ jobs:
             CODE_SIGNING_REQUIRED=YES \
             MARKETING_VERSION="${{ steps.version.outputs.version }}" \
             CURRENT_PROJECT_VERSION="${{ steps.version.outputs.build_number }}"
+
+      - name: Sign app with Developer ID
+        if: steps.signing.outputs.enabled == 'true'
+        shell: bash
+        run: |
+          ARCHIVE_APP="$RUNNER_TEMP/$APP_NAME.xcarchive/Products/Applications/$APP_NAME.app"
+          codesign \
+            --force \
+            --options runtime \
+            --timestamp \
+            --sign "${{ steps.signing-keychain.outputs.identity }}" \
+            "$ARCHIVE_APP"
+          codesign --verify --deep --strict --verbose=2 "$ARCHIVE_APP"
+
+      - name: Notarize and staple app
+        if: steps.signing.outputs.enabled == 'true'
+        shell: bash
+        run: |
+          ARCHIVE_APP="$RUNNER_TEMP/$APP_NAME.xcarchive/Products/Applications/$APP_NAME.app"
+          NOTARY_ARCHIVE="$RUNNER_TEMP/$APP_NAME-notarization.zip"
+          NOTARY_KEY_PATH="$RUNNER_TEMP/AuthKey_$APPLE_NOTARY_API_KEY_ID.p8"
+
+          printf '%s' "$APPLE_NOTARY_API_KEY_BASE64" | base64 --decode > "$NOTARY_KEY_PATH"
+          ditto -c -k --sequesterRsrc --keepParent "$ARCHIVE_APP" "$NOTARY_ARCHIVE"
+          xcrun notarytool submit "$NOTARY_ARCHIVE" \
+            --key "$NOTARY_KEY_PATH" \
+            --key-id "$APPLE_NOTARY_API_KEY_ID" \
+            --issuer "$APPLE_NOTARY_API_ISSUER_ID" \
+            --wait
+          xcrun stapler staple "$ARCHIVE_APP"
+          xcrun stapler validate "$ARCHIVE_APP"
 
       - name: Package app
         id: package
@@ -70,6 +165,12 @@ jobs:
           CHECKSUM_PATH="$RELEASE_DIR/$ASSET_BASENAME.sha256.txt"
           NOTES_PATH="$RELEASE_DIR/RELEASE_NOTES.txt"
 
+          if [[ "${{ steps.signing.outputs.enabled }}" == "true" ]]; then
+            SIGNING_STATUS="Developer ID signed and notarized"
+          else
+            SIGNING_STATUS="ad-hoc signed and not notarized"
+          fi
+
           mkdir -p "$RELEASE_DIR"
           codesign --verify --deep --strict --verbose=2 "$ARCHIVE_APP"
           codesign -dv --verbose=4 "$ARCHIVE_APP"
@@ -77,6 +178,8 @@ jobs:
           shasum -a 256 "$ZIP_PATH" > "$CHECKSUM_PATH"
           cat > "$NOTES_PATH" <<EOF
           $APP_NAME $VERSION
+
+          Signing: $SIGNING_STATUS
 
           Included files:
           - $ASSET_BASENAME.zip
@@ -94,6 +197,7 @@ jobs:
           echo "zip_path=$ZIP_PATH" >> "$GITHUB_OUTPUT"
           echo "checksum_path=$CHECKSUM_PATH" >> "$GITHUB_OUTPUT"
           echo "notes_path=$NOTES_PATH" >> "$GITHUB_OUTPUT"
+          echo "signing_status=$SIGNING_STATUS" >> "$GITHUB_OUTPUT"
 
       - name: Upload release artifacts
         uses: actions/upload-artifact@v4
@@ -110,6 +214,8 @@ jobs:
           body: |
             macOS release package for `${{ env.APP_NAME }}`.
 
+            Signing: `${{ steps.package.outputs.signing_status }}`.
+
             Files:
             - `${{ steps.package.outputs.asset_basename }}.zip`
             - `${{ steps.package.outputs.asset_basename }}.sha256.txt`
@@ -122,3 +228,9 @@ jobs:
           files: |
             ${{ steps.package.outputs.zip_path }}
             ${{ steps.package.outputs.checksum_path }}
+
+      - name: Remove temporary signing keychain
+        if: always() && steps.signing.outputs.enabled == 'true'
+        shell: bash
+        run: |
+          security delete-keychain "${{ steps.signing-keychain.outputs.keychain_path }}" || true

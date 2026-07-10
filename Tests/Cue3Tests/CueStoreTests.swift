@@ -283,10 +283,7 @@ final class CueStoreTests: XCTestCase {
             schema: Cue3Schema.schema,
             isStoredInMemoryOnly: true
         )
-        let container = try ModelContainer(
-            for: Cue3Schema.schema,
-            configurations: [configuration]
-        )
+        let container = try Cue3Schema.makeContainer(configurations: [configuration])
         retainedContainers.append(container)
         let store = CueStore(
             context: container.mainContext,
@@ -314,10 +311,7 @@ final class CueStoreTests: XCTestCase {
             schema: Cue3Schema.schema,
             isStoredInMemoryOnly: true
         )
-        let container = try ModelContainer(
-            for: Cue3Schema.schema,
-            configurations: [configuration]
-        )
+        let container = try Cue3Schema.makeContainer(configurations: [configuration])
         retainedContainers.append(container)
         let store = CueStore(
             context: container.mainContext,
@@ -399,16 +393,167 @@ final class CueStoreTests: XCTestCase {
         XCTAssertEqual(reopened.currentCue.map { reopened.orderedItems(for: $0)[0].annotationText }, "持久化批注")
     }
 
+    func testRepairingMultipleCurrentCuesIsPersisted() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Cue3RepairTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let storeURL = directory.appendingPathComponent("Cue3.store")
+        let firstID = UUID()
+
+        do {
+            let container = try makeDiskContainer(url: storeURL)
+            let context = container.mainContext
+            let timestamp = date("2026-06-20T08:00:00Z")
+            context.insert(CueRecord(
+                id: firstID,
+                status: .current,
+                createdAt: timestamp,
+                updatedAt: timestamp,
+                lastTouchedAt: timestamp
+            ))
+            context.insert(CueRecord(
+                status: .current,
+                createdAt: timestamp.addingTimeInterval(10),
+                updatedAt: timestamp.addingTimeInterval(10),
+                lastTouchedAt: timestamp.addingTimeInterval(10)
+            ))
+            context.insert(AppStateRecord(currentCueID: firstID))
+            try context.save()
+        }
+
+        do {
+            let container = try makeDiskContainer(url: storeURL)
+            let repaired = CueStore(context: container.mainContext)
+            XCTAssertEqual(repaired.currentCueID, firstID)
+            XCTAssertEqual(repaired.cues.filter { $0.status == .current }.count, 1)
+        }
+
+        let reopenedContainer = try makeDiskContainer(url: storeURL)
+        let persistedCues = try reopenedContainer.mainContext.fetch(FetchDescriptor<CueRecord>())
+        XCTAssertEqual(persistedCues.filter { $0.status == .current }.map(\.id), [firstID])
+    }
+
+    func testRepairRemovesDuplicateMainStateRecords() throws {
+        let clock = TestClock(date("2026-06-20T08:00:00Z"))
+        let configuration = ModelConfiguration(
+            "Cue3DuplicateStateTests",
+            schema: Cue3Schema.schema,
+            isStoredInMemoryOnly: true
+        )
+        let container = try Cue3Schema.makeContainer(configurations: [configuration])
+        retainedContainers.append(container)
+        let context = container.mainContext
+        let cue = CueRecord(
+            status: .current,
+            createdAt: clock.value,
+            updatedAt: clock.value,
+            lastTouchedAt: clock.value
+        )
+        context.insert(cue)
+        context.insert(AppStateRecord(currentCueID: nil))
+        context.insert(AppStateRecord(currentCueID: cue.id))
+        try context.save()
+
+        let store = CueStore(context: context, now: clock.callAsFunction)
+        let mainStates = try context.fetch(FetchDescriptor<AppStateRecord>())
+            .filter { $0.key == "main" }
+
+        XCTAssertEqual(mainStates.count, 1)
+        XCTAssertEqual(mainStates[0].currentCueID, store.currentCueID)
+        XCTAssertEqual(store.currentCueID, cue.id)
+    }
+
+    func testRepairDeletesOrphanedItems() throws {
+        let clock = TestClock(date("2026-06-20T08:00:00Z"))
+        let configuration = ModelConfiguration(
+            "Cue3OrphanRepairTests",
+            schema: Cue3Schema.schema,
+            isStoredInMemoryOnly: true
+        )
+        let container = try Cue3Schema.makeContainer(configurations: [configuration])
+        retainedContainers.append(container)
+        let context = container.mainContext
+        context.insert(CueItemRecord(
+            cueID: UUID(),
+            quoteText: "孤儿引用",
+            position: 0,
+            createdAt: clock.value,
+            updatedAt: clock.value
+        ))
+        try context.save()
+
+        let store = CueStore(context: context, now: clock.callAsFunction)
+        let persistedItems = try context.fetch(FetchDescriptor<CueItemRecord>())
+
+        XCTAssertTrue(store.items.isEmpty)
+        XCTAssertTrue(persistedItems.isEmpty)
+    }
+
+    func testVersionedSchemaOpensExistingUnversionedStore() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("Cue3LegacySchemaTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let storeURL = directory.appendingPathComponent("Cue3.store")
+        let cueID = UUID()
+
+        do {
+            let legacySchema = Schema([
+                CueRecord.self,
+                CueItemRecord.self,
+                AppStateRecord.self
+            ])
+            let configuration = ModelConfiguration(
+                "Cue3LegacySchemaTests",
+                schema: legacySchema,
+                url: storeURL
+            )
+            let legacyContainer = try ModelContainer(
+                for: legacySchema,
+                configurations: [configuration]
+            )
+            let timestamp = date("2026-06-20T08:00:00Z")
+            legacyContainer.mainContext.insert(CueRecord(
+                id: cueID,
+                status: .current,
+                createdAt: timestamp,
+                updatedAt: timestamp,
+                lastTouchedAt: timestamp
+            ))
+            legacyContainer.mainContext.insert(AppStateRecord(currentCueID: cueID))
+            try legacyContainer.mainContext.save()
+        }
+
+        let migratedContainer = try makeDiskContainer(url: storeURL)
+        let migratedStore = CueStore(context: migratedContainer.mainContext)
+
+        XCTAssertEqual(migratedStore.currentCueID, cueID)
+        XCTAssertEqual(migratedStore.currentCue?.id, cueID)
+        XCTAssertEqual(migratedContainer.schema.version, Cue3SchemaV1.versionIdentifier)
+    }
+
+    func testCueOutputFormatterIsIndependentFromPersistence() {
+        let formatter = CueOutputFormatter()
+        let output = formatter.format(items: [
+            .init(quoteText: "第一段", annotationText: "批注"),
+            .init(quoteText: "第二段", annotationText: nil)
+        ])
+
+        XCTAssertEqual(output, "第一段\n批注：批注\n\n第二段")
+        XCTAssertEqual(
+            formatter.applyTemplate("整理：\n{{Cue}}", placeholder: "{{Cue}}", to: output),
+            "整理：\n第一段\n批注：批注\n\n第二段"
+        )
+    }
+
     private func makeStore(clock: TestClock) throws -> (CueStore, ModelContainer) {
         let configuration = ModelConfiguration(
             "Cue3Tests",
             schema: Cue3Schema.schema,
             isStoredInMemoryOnly: true
         )
-        let container = try ModelContainer(
-            for: Cue3Schema.schema,
-            configurations: [configuration]
-        )
+        let container = try Cue3Schema.makeContainer(configurations: [configuration])
         retainedContainers.append(container)
         return (
             CueStore(
@@ -425,10 +570,7 @@ final class CueStoreTests: XCTestCase {
             schema: Cue3Schema.schema,
             url: url
         )
-        return try ModelContainer(
-            for: Cue3Schema.schema,
-            configurations: [configuration]
-        )
+        return try Cue3Schema.makeContainer(configurations: [configuration])
     }
 
     private func date(_ value: String) -> Date {

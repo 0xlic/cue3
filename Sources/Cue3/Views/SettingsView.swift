@@ -58,8 +58,25 @@ struct SettingsRootView: View {
         }
         .frame(width: Self.preferredWidth, height: selectedTab.preferredHeight)
         .onAppear(perform: reportPreferredContentSize)
-        .onChange(of: selectedTab) { _ in
+        .onChange(of: selectedTab) {
             reportPreferredContentSize()
+        }
+        .alert(
+            "设置未生效",
+            isPresented: Binding(
+                get: { settings.systemErrorMessage != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        settings.clearSystemError()
+                    }
+                }
+            )
+        ) {
+            Button("知道了") {
+                settings.clearSystemError()
+            }
+        } message: {
+            Text(settings.systemErrorMessage ?? "发生未知错误。")
         }
     }
 
