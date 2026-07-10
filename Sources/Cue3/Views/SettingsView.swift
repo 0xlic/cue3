@@ -621,5 +621,8 @@ private struct AppIconImage: View {
             .interpolation(.high)
             .aspectRatio(1, contentMode: .fit)
             .frame(width: size, height: size)
+            .clipShape(
+                RoundedRectangle(cornerRadius: size * 0.22, style: .continuous)
+            )
     }
 }
